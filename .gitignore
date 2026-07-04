@@ -1,0 +1,28 @@
+# Pixi — environnement local
+.pixi/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+.pytest_cache/
+
+# Sphinx — généré
+docs/_build/
+docs/build/
+
+# Résultats — trop lourds
+*.h5
+runs/
+outputs/
+
+# Cluster
+*.out
+*.err
+slurm-*.out
+
+# Editeurs
+.vscode/
+.idea/
+*.swp
