@@ -26,3 +26,5 @@ slurm-*.out
 .vscode/
 .idea/
 *.swp
+
+PyBOED_Architecture.md
