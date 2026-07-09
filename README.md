@@ -1,6 +1,6 @@
 # CBOED
 
-**Computational Bayesian Optimal Experimental Design**
+## Computational Bayesian Optimal Experimental Design
 
 A Python library for Bayesian optimal experimental design (BOED) in high-dimensional settings, with a focus on sensor placement for ocean models and large-scale inverse problems.
 
@@ -15,6 +15,7 @@ CBOED addresses the problem of finding optimal sensor configurations to maximize
 $$\text{EIG}(\xi) = H(\theta) - \mathbb{E}_y\left[H(\theta \mid y, \xi)\right]$$
 
 The library is built to handle:
+
 - **Linear and nonlinear forward models** — exact analytical solutions for the linear Gaussian case, Monte Carlo estimators for the nonlinear case
 - **Goal-oriented design** — when only a quantity of interest $\theta = h(\eta)$ needs to be reconstructed
 - **High-dimensional settings** — randomized linear algebra, low-rank representations, and matrix-free operators
@@ -26,15 +27,15 @@ The library is built to handle:
 
 Early development — `0.x` means the API is unstable and may change.
 
-| Module | Status |
+|Module|Status|
 |---|---|
-| `core/` — abstract interfaces | 🔨 in progress |
-| `linalg/` — randomized linear algebra | 🔨 in progress |
-| `criteria/` — EIG, D-optimal | 🔨 in progress |
-| `bounds/` — EIG certification | 📋 planned |
-| `priors/` — Matérn priors | 📋 planned |
-| `optim/` — greedy optimizer | 📋 planned |
-| `surrogates/` — neural surrogates | 🔮 future |
+|`core/` — abstract interfaces|🔨 in progress|
+|`linalg/` — randomized linear algebra|🔨 in progress|
+|`criteria/` — EIG, D-optimal|🔨 in progress|
+|`bounds/` — EIG certification|📋 planned|
+|`priors/` — Matérn priors|📋 planned|
+|`optim/` — greedy optimizer|📋 planned|
+|`surrogates/` — neural surrogates|🔮 future|
 
 ---
 
@@ -91,6 +92,7 @@ This provides a continuous control of nonlinearity and serves as the reference b
 - See `pyproject.toml` for the full dependency list
 
 Optional (neural surrogates):
+
 ```bash
 pixi install --environment surrogates
 ```
@@ -99,7 +101,7 @@ pixi install --environment surrogates
 
 ## Project structure
 
-```
+```text
 cboed/
 ├── core/          Abstract interfaces — ForwardModel, State, Criterion, Optimizer
 ├── criteria/      EIG, D-optimal, goal-oriented, reconstruction
@@ -131,4 +133,4 @@ To be determined.
 
 ---
 
-*PhD thesis — AIRSEA, Inria Grenoble · Université Grenoble Alpes*
+PhD thesis — AIRSEA, Inria Grenoble · Université Grenoble Alpes
