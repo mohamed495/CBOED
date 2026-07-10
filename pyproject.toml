@@ -27,6 +27,8 @@ numpy = ">=2.5.0,<3"
 h5py = ">=3.16.0,<4"
 matplotlib = ">=3.11.0,<4"
 pandas = ">=3.0.3,<4"
+jaxtyping = ">=0.3.11,<0.4"
+beartype = ">=0.22.9,<0.23"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
@@ -69,3 +71,4 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "RUF"]
+ignore = ["F722"]
