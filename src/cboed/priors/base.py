@@ -1,5 +1,6 @@
 # src/cboed/priors/base.py
 from abc import ABC, abstractmethod
+
 import jax.numpy as jnp
 
 

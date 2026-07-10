@@ -1,5 +1,6 @@
-from cboed.priors.base import KernelBase
 import jax.numpy as jnp
+
+from cboed.priors.base import KernelBase
 
 
 class Gaussian(KernelBase):

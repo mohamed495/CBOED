@@ -1,8 +1,9 @@
-from cboed.core.base import ForwardModel
-from cboed.core.linear_operator import LinearizedOperator
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
+
+from cboed.core.base import ForwardModel
+from cboed.core.linear_operator import LinearizedOperator
 
 
 class AdvectionDiffusion(ForwardModel):
@@ -89,7 +90,7 @@ class AdvectionDiffusion(ForwardModel):
         """
         return self.linearize(theta)
 
-    def jacobian(self, theta, xi=None):
+    def jacobian(self, theta: jnp.ndarray, xi=None) -> jnp.ndarray:
         """dG/dtheta comme operateur matrix-free (jamais materialise).
         Arguments :
             theta : scalar or ndarray
@@ -110,7 +111,7 @@ class AdvectionDiffusion(ForwardModel):
         product operation
         """
         op = self.jacobian_operator(theta)
-        return jax.vmap(op.matvec)(jnp.eye(self.n)).T
+        return jnp.asarray(jax.vmap(op.matvec)(jnp.eye(self.n)).T)
 
     # ------------------------------------------------------------------
     # Coeur numerique : pas de Crank-Nicolson

@@ -10,7 +10,7 @@ class LinearizedOperator:
     def __init__(self, matvec, rmatvec, shape):
         self._mv = matvec
         self._rmv = rmatvec
-        
+
         self.shape = shape
 
     def matvec(self, v):
@@ -18,7 +18,6 @@ class LinearizedOperator:
 
     def rmatvec(self, w):
         return self._rmv(w)
-    
 
     @property
     def T(self):
