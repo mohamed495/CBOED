@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import pytest
 
 from cboed.priors import kernel
 
@@ -72,3 +73,28 @@ def test_Periodic():
     output = periodic(x1=x1, x2=x2)
 
     assert jnp.allclose(output, expected)
+
+
+@pytest.mark.parametrize(
+    "kernel_cls,kwargs",
+    [
+        (kernel.Gaussian, {"length_scale": 0.3, "sigma": 1.0}),
+        (kernel.Matern12, {"length_scale": 0.3, "sigma": 1.0}),
+        (kernel.Matern32, {"length_scale": 0.3, "sigma": 1.0}),
+        (kernel.Matern52, {"length_scale": 0.3, "sigma": 1.0}),
+    ],
+)
+def test_gram_is_psd(kernel_cls, kwargs):
+    k = kernel_cls(**kwargs)
+    x = jnp.linspace(0.0, 1.0, 20)
+    K = k(x, x)
+    assert jnp.allclose(K, K.T)
+    eigs = jnp.linalg.eigvalsh(K)
+    assert eigs.min() > -1e-10
+
+
+def test_gram_is_rectangular():
+    k = kernel.Gaussian(length_scale=0.3, sigma=1.0)
+    x1 = jnp.linspace(0.0, 1.0, 5)
+    x2 = jnp.linspace(0.0, 1.0, 7)
+    assert k(x1, x2).shape == (5, 7)

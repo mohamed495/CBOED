@@ -1,5 +1,11 @@
 from abc import ABC, abstractmethod
 
+from beartype import beartype
+from jax import Array
+from jaxtyping import Float, PRNGKeyArray, jaxtyped
+
+from cboed.core.linear_operator import LinearizedOperator
+
 
 class Likelihood(ABC):
     """p(y | theta, xi). Owns the observation operator and the noise model.
@@ -11,22 +17,33 @@ class Likelihood(ABC):
     def __init__(self, **hyperparameters):
         self._hyperparameters = hyperparameters
 
-    # @abstractmethod
-    # def __call__(self, theta, xi=None):
-    #     """Predictive mean of y given (theta, xi)."""
-    #     ...
-
     @abstractmethod
-    def jacobian(self, theta, xi=None):
+    def jacobian(
+        self,
+        theta: Float[Array, " n_param"],
+        xi: Float[Array, " n_sensors"] | None = None,
+    ) -> LinearizedOperator:
         """d(mean)/dtheta at (theta, xi), as a matrix-free operator."""
         ...
 
     @abstractmethod
-    def log_likelihood(self, y, theta, xi=None):
+    @jaxtyped(typechecker=beartype)
+    def log_likelihood(
+        self,
+        y: Float[Array, " n_obs"],
+        theta: Float[Array, " n_param"],
+        xi: Float[Array, " n_sensors"] | None = None,
+    ) -> Float[Array, ""]:
         """log p(y | theta, xi)."""
         ...
 
-    # @abstractmethod
-    # def sample(self, key, theta, xi=None, n_samples=1):
-    #     """Draw y ~ p(. | theta, xi). Requires an explicit PRNG key."""
-    #     ...
+    @abstractmethod
+    def sample(
+        self,
+        key: PRNGKeyArray,
+        theta: Float[Array, " n_param"],
+        xi: Float[Array, " n_sensors"] | None = None,
+        n_samples: int = 1,
+    ) -> Float[Array, "n_samples n_obs"]:
+        """Tire y ~ p(· | theta, xi)."""
+        ...

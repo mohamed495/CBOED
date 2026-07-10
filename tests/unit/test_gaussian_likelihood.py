@@ -9,12 +9,12 @@ import cboed.priors.kernel as kernel
 from cboed.core.advection_diffusion import AdvectionDiffusion
 from cboed.core.linear_operator import LinearizedOperator
 from cboed.likelihood.gaussian_likelihood import gaussianLikelihood
-from cboed.priors.gaussian_priors import GaussianProcessPrior
+from cboed.priors.gaussian_process import GaussianProcess
 
 
 class Setup(NamedTuple):
     model: AdvectionDiffusion
-    prior: GaussianProcessPrior
+    prior: GaussianProcess
     likelihood: gaussianLikelihood
 
 
@@ -28,7 +28,7 @@ def setup() -> Setup:
         nt=5,
         n=4,
     )
-    prior = GaussianProcessPrior(
+    prior = GaussianProcess(
         kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(model.n)
     )
     likelihood = gaussianLikelihood(
@@ -38,7 +38,7 @@ def setup() -> Setup:
 
 
 def test_isinstance(setup: Setup) -> None:
-    assert isinstance(setup.likelihood.prior, GaussianProcessPrior)
+    assert isinstance(setup.likelihood.prior, GaussianProcess)
     assert isinstance(setup.likelihood.prior.kernel, kernel.Gaussian)
 
 
@@ -120,3 +120,79 @@ def test_hessian(setup: Setup) -> None:
     assert jnp.allclose(-A.T @ SI[0] @ A, setup.likelihood.hessian(theta))
     assert isinstance(A, jax.Array)
     assert isinstance(SI[0], jax.Array)
+
+
+def test_hessian_matches_operator(setup):
+    theta = jnp.ones(setup.model.n)
+    H_dense = setup.likelihood.hessian(theta)
+    H_op = setup.likelihood.hessian_operator(theta)
+    v = jax.random.normal(jax.random.key(0), (setup.model.n,))
+    assert jnp.allclose(H_dense @ v, H_op.matvec(v))
+
+
+def test_hessian_matches_finite_difference(setup):
+    theta = jnp.arange(1.0, setup.model.n + 1)
+    key = jax.random.key(0)
+    y = setup.model(theta) + jax.random.normal(key, (setup.model.n_obs,))
+
+    H_analytic = setup.likelihood.hessian(theta)
+    H_autodiff = jax.hessian(lambda t: setup.likelihood.log_likelihood(y, t))(theta)
+
+    assert jnp.allclose(H_analytic, H_autodiff, atol=1e-8)
+
+
+def test_sample_is_deterministic_given_key(setup):
+    theta = jnp.ones(setup.model.n)
+    key = jax.random.key(0)
+    a = setup.likelihood.sample(key, theta, n_samples=5)
+    b = setup.likelihood.sample(key, theta, n_samples=5)
+    assert jnp.array_equal(a, b)
+
+
+def test_different_keys_give_different_samples(setup):
+    theta = jnp.ones(setup.model.n)
+    a = setup.likelihood.sample(jax.random.key(0), theta)
+    b = setup.likelihood.sample(jax.random.key(1), theta)
+    assert not jnp.allclose(a, b)
+
+
+def test_sample_shape(setup):
+    theta = jnp.ones(setup.model.n)
+    y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=7)
+    assert y.shape == (7, setup.model.n_obs)
+
+
+@pytest.mark.slow("n")
+def test_sample_moments(setup):
+    theta = jnp.arange(1.0, setup.model.n + 1)
+    n = 200_000
+    y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n)
+
+    mean_hat = y.mean(axis=0)
+    cov_hat = jnp.cov(y.T)
+
+    expected_mean = setup.model(theta)
+    expected_cov = setup.likelihood.Sigma_obs
+
+    # erreur-type de la moyenne : sigma / sqrt(n)
+    tol_mean = 5.0 * jnp.sqrt(jnp.diag(expected_cov) / n)
+    assert jnp.all(jnp.abs(mean_hat - expected_mean) < tol_mean)
+
+    assert jnp.allclose(cov_hat, expected_cov, atol=5e-2)
+
+
+@pytest.mark.slow("n")
+def test_sample_matches_log_likelihood(setup):
+    """La log-vraisemblance empirique moyenne doit approcher l'entropie
+    différentielle négative de la gaussienne."""
+    theta = jnp.ones(setup.model.n)
+    n_samples = 50_000
+    y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n_samples)
+
+    ll = jax.vmap(lambda yi: setup.likelihood.log_likelihood(yi, theta))(y)
+
+    d = setup.model.n_obs
+    _, logdet = jnp.linalg.slogdet(setup.likelihood.Sigma_obs)
+    expected = -0.5 * (d * jnp.log(2 * jnp.pi) + logdet + d)
+
+    assert jnp.abs(ll.mean() - expected) < 0.05

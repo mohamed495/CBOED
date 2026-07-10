@@ -1,4 +1,4 @@
-import jax.numpy as jnp
+import jax.numpy as jnp  # type: ignore
 
 from cboed.core.linear_operator import LinearizedOperator
 

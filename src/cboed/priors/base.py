@@ -1,7 +1,8 @@
 # src/cboed/priors/base.py
 from abc import ABC, abstractmethod
 
-import jax.numpy as jnp
+from jax import Array
+from jaxtyping import Float
 
 
 class KernelBase(ABC):
@@ -30,7 +31,9 @@ class KernelBase(ABC):
         self._hyperparameters = hyperparameters
 
     @abstractmethod
-    def __call__(self, x1: jnp.array, x2: jnp.array):
+    def __call__(
+        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
+    ) -> Float[Array, "n m"]:
         """Evaluate the kernel at point pairs.
 
         Parameters

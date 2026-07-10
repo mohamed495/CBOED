@@ -5,7 +5,7 @@ from jaxtyping import Array, Float, jaxtyped  # type: ignore
 
 
 class LinearizedOperator:
-    """Opérateur linéaire matrix-free.
+    """Linear operator matrix-free.
 
     - matvec(v)  : v -> G v
     - rmatvec(w) : w -> G^T w

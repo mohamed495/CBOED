@@ -1,4 +1,6 @@
 import jax.numpy as jnp
+from jax import Array
+from jaxtyping import Float
 
 from cboed.priors.base import KernelBase
 
@@ -7,7 +9,8 @@ class Gaussian(KernelBase):
     """
     RBF/Gaussian kernel.
 
-    k(x, x') = sigma^2 exp(-||x - x'||^2 / (2l^2))
+    .. math::
+        k(x, x') = \\sigma^2 \\exp\\left(-\\frac{\\|x - x'\\|^2}{2\\ell^2}\\right)
 
     Infinitely differentiable, very smooth.
 
@@ -24,28 +27,20 @@ class Gaussian(KernelBase):
     >>> K = kernel(x1, x2)
     """
 
-    def __init__(self, length_scale: float, sigma: float):
+    def __init__(self, length_scale: float, sigma: float) -> None:
         super().__init__(length_scale=length_scale, sigma=sigma)
 
     @property
-    def length_scale(self):
+    def length_scale(self) -> float:
         return self._hyperparameters["length_scale"]
 
-    @length_scale.setter
-    def length_scale(self, length_scale):
-        self._hyperparameters["length_scale"] = length_scale
-
     @property
-    def sigma(self):
+    def sigma(self) -> float:
         return self._hyperparameters["sigma"]
 
-    @sigma.setter
-    def sigma(self, sigma):
-        self._hyperparameters["sigma"] = sigma
-
-    def __call__(self, x1: jnp.ndarray, x2: jnp.ndarray) -> jnp.ndarray:
-        x1 = jnp.atleast_1d(x1)
-        x2 = jnp.atleast_1d(x2)
+    def __call__(
+        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
+    ) -> Float[Array, "n m"]:
         d = jnp.abs(jnp.subtract.outer(x1, x2))
         return (self.sigma**2) * jnp.exp(-(d**2) / (2 * self.length_scale**2))
 
@@ -71,28 +66,22 @@ class Matern12(KernelBase):
     >>> K = kernel(x, x')
     """
 
-    def __init__(self, length_scale: float, sigma: float):
+    def __init__(self, length_scale: float, sigma: float) -> None:
         super().__init__(length_scale=length_scale, sigma=sigma)
 
-    def __call__(self, x1: jnp.ndarray, x2: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
+    ) -> Float[Array, "n m"]:
         d = jnp.abs(jnp.subtract.outer(x1, x2))
         return (self.sigma**2) * jnp.exp(-d / self.length_scale)
 
     @property
-    def length_scale(self):
+    def length_scale(self) -> float:
         return self._hyperparameters["length_scale"]
 
     @property
-    def sigma(self):
+    def sigma(self) -> float:
         return self._hyperparameters["sigma"]
-
-    @length_scale.setter
-    def length_scale(self, length_scale):
-        self.length_scale = length_scale
-
-    @sigma.setter
-    def sigma(self, sigma):
-        self.sigma = sigma
 
 
 class Matern32(KernelBase):
@@ -116,29 +105,23 @@ class Matern32(KernelBase):
     >>> K = kernel(x, x')
     """
 
-    def __init__(self, length_scale: float, sigma: float):
+    def __init__(self, length_scale: float, sigma: float) -> None:
         super().__init__(length_scale=length_scale, sigma=sigma)
 
-    def __call__(self, x1: jnp.ndarray, x2: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
+    ) -> Float[Array, "n m"]:
         d = jnp.abs(jnp.subtract.outer(x1, x2))
         r = jnp.sqrt(3) * d / self.length_scale
         return (self.sigma**2) * (1 + r) * jnp.exp(-r)
 
     @property
-    def length_scale(self):
+    def length_scale(self) -> float:
         return self._hyperparameters["length_scale"]
 
     @property
-    def sigma(self):
+    def sigma(self) -> float:
         return self._hyperparameters["sigma"]
-
-    @length_scale.setter
-    def length_scale(self, length_scale):
-        self.length_scale = length_scale
-
-    @sigma.setter
-    def sigma(self, sigma):
-        self.sigma = sigma
 
 
 class Matern52(KernelBase):
@@ -162,29 +145,23 @@ class Matern52(KernelBase):
     >>> K = kernel(x, x')
     """
 
-    def __init__(self, length_scale: float, sigma: float):
+    def __init__(self, length_scale: float, sigma: float) -> None:
         super().__init__(length_scale=length_scale, sigma=sigma)
 
-    def __call__(self, x1: jnp.ndarray, x2: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
+    ) -> Float[Array, "n m"]:
         d = jnp.abs(jnp.subtract.outer(x1, x2))
         r = jnp.sqrt(5) * d / self.length_scale
         return (self.sigma**2) * (1 + r + r**2 / 3) * jnp.exp(-r)
 
     @property
-    def length_scale(self):
+    def length_scale(self) -> float:
         return self._hyperparameters["length_scale"]
 
     @property
-    def sigma(self):
+    def sigma(self) -> float:
         return self._hyperparameters["sigma"]
-
-    @length_scale.setter
-    def length_scale(self, length_scale):
-        self.length_scale = length_scale
-
-    @sigma.setter
-    def sigma(self, sigma):
-        self.sigma = sigma
 
 
 class RationalQuadratic(KernelBase):
@@ -207,38 +184,28 @@ class RationalQuadratic(KernelBase):
     >>> K = kernel(x, x')
     """
 
-    def __init__(self, length_scale: float, sigma: float, alpha: float):
+    def __init__(self, length_scale: float, sigma: float, alpha: float) -> None:
         super().__init__(length_scale=length_scale, sigma=sigma, alpha=alpha)
 
-    def __call__(self, x1: jnp.ndarray, x2: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
+    ) -> Float[Array, "n m"]:
         d = jnp.abs(jnp.subtract.outer(x1, x2))
         return (self.sigma**2) * (
             1 + d**2 / (2 * self.alpha * self.length_scale**2)
         ) ** (-self.alpha)
 
     @property
-    def length_scale(self):
+    def length_scale(self) -> float:
         return self._hyperparameters["length_scale"]
 
     @property
-    def sigma(self):
+    def sigma(self) -> float:
         return self._hyperparameters["sigma"]
 
     @property
-    def alpha(self):
+    def alpha(self) -> float:
         return self._hyperparameters["alpha"]
-
-    @length_scale.setter
-    def length_scale(self, length_scale):
-        self.length_scale = length_scale
-
-    @sigma.setter
-    def sigma(self, sigma):
-        self.sigma = sigma
-
-    @alpha.setter
-    def alpha(self, alpha):
-        self.alpha = alpha
 
 
 class Periodic(KernelBase):
@@ -261,10 +228,12 @@ class Periodic(KernelBase):
     >>> K = kernel(x, x')
     """
 
-    def __init__(self, length_scale: float, sigma: float, period: float):
+    def __init__(self, length_scale: float, sigma: float, period: float) -> None:
         super().__init__(length_scale=length_scale, sigma=sigma, period=period)
 
-    def __call__(self, x1: jnp.ndarray, x2: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
+    ) -> Float[Array, "n m"]:
         d = jnp.abs(jnp.subtract.outer(x1, x2))
         arg = jnp.pi * d / self.period
         return (self.sigma**2) * jnp.exp(
@@ -272,25 +241,13 @@ class Periodic(KernelBase):
         )
 
     @property
-    def length_scale(self):
+    def length_scale(self) -> float:
         return self._hyperparameters["length_scale"]
 
     @property
-    def sigma(self):
+    def sigma(self) -> float:
         return self._hyperparameters["sigma"]
 
     @property
-    def period(self):
+    def period(self) -> float:
         return self._hyperparameters["period"]
-
-    @length_scale.setter
-    def length_scale(self, length_scale):
-        self.length_scale = length_scale
-
-    @sigma.setter
-    def sigma(self, sigma):
-        self.sigma = sigma
-
-    @period.setter
-    def alpha(self, period):
-        self.period = period

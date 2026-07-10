@@ -1,6 +1,9 @@
 # src/cboed/core/base.py
 from abc import ABC, abstractmethod
 
+from jax import Array
+from jaxtyping import Float
+
 
 class ForwardModel(ABC):
     """
@@ -32,7 +35,11 @@ class ForwardModel(ABC):
         ...
 
     @abstractmethod
-    def __call__(self, theta, xi):
+    def __call__(
+        self,
+        theta: Float[Array, " n_parameters"],
+        xi: Float[Array, " n_sensors"] | None = None,
+    ) -> Float[Array, " n_obs"]:
         """
         Evaluate G(θ, ξ).
 
