@@ -4,11 +4,14 @@ Provides Gaussian Process prior distributions with flexible kernel choices
 for parameter estimation in PDE-based inverse problems.
 """
 
+import jax
 import jax.numpy as jnp
+import jax.scipy as jsp
+from beartype import beartype
 from jax import Array
-from jaxtyping import Float
+from jaxtyping import Float, PRNGKeyArray, jaxtyped
 
-from cboed.priors.base import KernelBase
+from cboed.priors.base import KernelBase, Prior
 
 
 class GaussianProcess:
@@ -69,3 +72,65 @@ class GaussianProcess:
     def _build_covariance(self, x: Float[Array, " nx"]) -> Float[Array, "nx nx"]:
         K = self.kernel(x, x)
         return K + self.jitter * jnp.eye(len(x))
+
+
+class gaussianPrior(Prior):
+    def __init__(self, **hyperparameters):
+        super().__init__(**hyperparameters)
+
+        Sigma = self.prior.Sigma
+
+        # Factorization used for linear solves (Sigma^{-1} x)
+        self._chol = jsp.linalg.cho_factor(Sigma, lower=True)
+
+        # Cholesky factor used for sampling
+        self._L = jnp.linalg.cholesky(Sigma)
+
+        self._H = -jsp.linalg.cho_solve(
+            self._chol,
+            jnp.eye(self.prior.mu.shape[0], dtype=Sigma.dtype),
+        )
+
+    @property
+    def prior(self) -> GaussianProcess:
+        return self._hyperparameters["prior"]
+
+    @jaxtyped(typechecker=beartype)
+    def log_prior(
+        self,
+        theta: Float[Array, " n_param"],
+    ) -> Float[Array, ""]:
+        """Log-density of a multivariate Gaussian prior."""
+        n = theta.shape[0]
+        r = theta - self.prior.mu
+
+        quad = r @ jsp.linalg.cho_solve(self._chol, r)
+        logdet = 2.0 * jnp.sum(jnp.log(jnp.diag(self._chol[0])))
+
+        return -0.5 * (n * jnp.log(2 * jnp.pi) + logdet + quad)
+
+    @jaxtyped(typechecker=beartype)
+    def grad_log_prior(
+        self,
+        theta: Float[Array, " n_param"],
+    ) -> Float[Array, " n_param"]:
+        """Gradient of the Gaussian log prior."""
+        r = theta - self.prior.mu
+        return -jsp.linalg.cho_solve(self._chol, r)
+
+    @jaxtyped(typechecker=beartype)
+    def hessian(
+        self,
+    ) -> Float[Array, "n_param n_param"]:
+        """Hessian of the Gaussian log prior."""
+        return self._H
+
+    def sample(
+        self,
+        key: PRNGKeyArray,
+        n_samples: int = 1,
+    ) -> Float[Array, "n_samples n_parameters"]:
+        """Draw samples from the Gaussian prior."""
+        mean = self.prior.mu
+        z = jax.random.normal(key, (n_samples, mean.shape[0]))
+        return mean + z @ self._L.T

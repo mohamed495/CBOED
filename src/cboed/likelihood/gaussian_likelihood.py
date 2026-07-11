@@ -5,8 +5,10 @@ from beartype import beartype
 from jax import Array
 from jaxtyping import Float, PRNGKeyArray, jaxtyped
 
+from cboed.core.base import ForwardModel
 from cboed.core.linear_operator import LinearizedOperator
 from cboed.likelihood.base import Likelihood
+from cboed.priors.gaussian_process import GaussianProcess
 
 
 class gaussianLikelihood(Likelihood):
@@ -15,16 +17,17 @@ class gaussianLikelihood(Likelihood):
         # inverse of the observation covariance matrix
         self._chol = jsp.linalg.cho_factor(self.Sigma_obs, lower=True)  # once
 
+    @jaxtyped(typechecker=beartype)
     @property
-    def Sigma_obs(self):
+    def Sigma_obs(self) -> Float[Array, "n_obs n_obs"]:
         return self._hyperparameters["Sigma_obs"]
 
     @property
-    def model(self):
+    def model(self) -> ForwardModel:
         return self._hyperparameters["model"]
 
     @property
-    def prior(self):
+    def prior(self) -> GaussianProcess:
         return self._hyperparameters["prior"]
 
     @jaxtyped(typechecker=beartype)

@@ -28,3 +28,4 @@ slurm-*.out
 *.swp
 
 PyBOED_Architecture.md
+CBOED_Architecture.md

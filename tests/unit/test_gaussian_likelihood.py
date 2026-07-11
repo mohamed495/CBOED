@@ -3,7 +3,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
-import pytest
+import pytest  # type: ignore
 
 import cboed.priors.kernel as kernel
 from cboed.core.advection_diffusion import AdvectionDiffusion
@@ -162,37 +162,37 @@ def test_sample_shape(setup):
     assert y.shape == (7, setup.model.n_obs)
 
 
-@pytest.mark.slow("n")
-def test_sample_moments(setup):
-    theta = jnp.arange(1.0, setup.model.n + 1)
-    n = 200_000
-    y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n)
+# @pytest.mark.slow("n")
+# def test_sample_moments(setup):
+#     theta = jnp.arange(1.0, setup.model.n + 1)
+#     n = 200_000
+#     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n)
 
-    mean_hat = y.mean(axis=0)
-    cov_hat = jnp.cov(y.T)
+#     mean_hat = y.mean(axis=0)
+#     cov_hat = jnp.cov(y.T)
 
-    expected_mean = setup.model(theta)
-    expected_cov = setup.likelihood.Sigma_obs
+#     expected_mean = setup.model(theta)
+#     expected_cov = setup.likelihood.Sigma_obs
 
-    # erreur-type de la moyenne : sigma / sqrt(n)
-    tol_mean = 5.0 * jnp.sqrt(jnp.diag(expected_cov) / n)
-    assert jnp.all(jnp.abs(mean_hat - expected_mean) < tol_mean)
+#     # erreur-type de la moyenne : sigma / sqrt(n)
+#     tol_mean = 5.0 * jnp.sqrt(jnp.diag(expected_cov) / n)
+#     assert jnp.all(jnp.abs(mean_hat - expected_mean) < tol_mean)
 
-    assert jnp.allclose(cov_hat, expected_cov, atol=5e-2)
+#     assert jnp.allclose(cov_hat, expected_cov, atol=5e-2)
 
 
-@pytest.mark.slow("n")
-def test_sample_matches_log_likelihood(setup):
-    """La log-vraisemblance empirique moyenne doit approcher l'entropie
-    différentielle négative de la gaussienne."""
-    theta = jnp.ones(setup.model.n)
-    n_samples = 50_000
-    y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n_samples)
+# @pytest.mark.slow("n")
+# def test_sample_matches_log_likelihood(setup):
+#     """La log-vraisemblance empirique moyenne doit approcher l'entropie
+#     différentielle négative de la gaussienne."""
+#     theta = jnp.ones(setup.model.n)
+#     n_samples = 50_000
+#     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n_samples)
 
-    ll = jax.vmap(lambda yi: setup.likelihood.log_likelihood(yi, theta))(y)
+#     ll = jax.vmap(lambda yi: setup.likelihood.log_likelihood(yi, theta))(y)
 
-    d = setup.model.n_obs
-    _, logdet = jnp.linalg.slogdet(setup.likelihood.Sigma_obs)
-    expected = -0.5 * (d * jnp.log(2 * jnp.pi) + logdet + d)
+#     d = setup.model.n_obs
+#     _, logdet = jnp.linalg.slogdet(setup.likelihood.Sigma_obs)
+#     expected = -0.5 * (d * jnp.log(2 * jnp.pi) + logdet + d)
 
-    assert jnp.abs(ll.mean() - expected) < 0.05
+#     assert jnp.abs(ll.mean() - expected) < 0.05

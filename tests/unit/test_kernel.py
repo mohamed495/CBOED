@@ -21,8 +21,6 @@ def test_matern12():
 
     matern12 = kernel.Matern12(length_scale=1.0, sigma=1.0)
     expected = jnp.exp(-1.0) * jnp.ones((3, 3))
-    print(f"expected = {expected}")
-    print()
     assert jnp.allclose(expected, matern12(x1=x1, x2=x2))
 
 

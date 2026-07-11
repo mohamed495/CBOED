@@ -1,8 +1,9 @@
 # src/cboed/priors/base.py
 from abc import ABC, abstractmethod
 
+from beartype import beartype
 from jax import Array
-from jaxtyping import Float
+from jaxtyping import Float, PRNGKeyArray, jaxtyped
 
 
 class KernelBase(ABC):
@@ -48,4 +49,29 @@ class KernelBase(ABC):
         np.ndarray
             Kernel matrix K(x1, x2), shape (n, m)
         """
+        ...
+
+
+class Prior(ABC):
+    """p(theta). Owns the prior model."""
+
+    def __init__(self, **hyperparameters):
+        self._hyperparameters = hyperparameters
+
+    @abstractmethod
+    @jaxtyped(typechecker=beartype)
+    def log_prior(
+        self, y: Float[Array, " n_obs"], theta: Float[Array, " n_param"]
+    ) -> Float[Array, ""]:
+        """log p(y | theta, xi)."""
+        ...
+
+    @abstractmethod
+    def sample(
+        self,
+        key: PRNGKeyArray,
+        theta: Float[Array, " n_param"],
+        n_samples: int = 1,
+    ) -> Float[Array, "n_samples n_obs"]:
+        """Tire y ~ p(· | theta, xi)."""
         ...
