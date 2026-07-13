@@ -7,11 +7,11 @@ import pytest  # type: ignore
 
 import cboed.priors.kernel as kernel
 from cboed.core.advection_diffusion import AdvectionDiffusion
-from cboed.priors.gaussian_process import GaussianProcess, gaussianPrior
+from cboed.priors.gaussian_process import GaussianPrior, GaussianProcess
 
 
 class Setup(NamedTuple):
-    gauss_prior: gaussianPrior
+    gauss_prior: GaussianPrior
 
 
 @pytest.fixture
@@ -27,13 +27,13 @@ def setup() -> Setup:
     prior = GaussianProcess(
         kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.zeros(model.n)
     )
-    gauss_prior = gaussianPrior(prior=prior)
+    gauss_prior = GaussianPrior(prior=prior)
 
     return Setup(gauss_prior)
 
 
 def test_isinstance(setup: Setup) -> None:
-    assert isinstance(setup.gauss_prior, gaussianPrior)
+    assert isinstance(setup.gauss_prior, GaussianPrior)
     assert isinstance(setup.gauss_prior.prior, GaussianProcess)
 
 
@@ -93,45 +93,3 @@ def test_different_keys_give_different_samples(setup):
     a = setup.gauss_prior.sample(jax.random.key(0))
     b = setup.gauss_prior.sample(jax.random.key(1))
     assert not jnp.allclose(a, b)
-
-
-# def test_sample_shape(setup):
-#     theta = jnp.ones(setup.model.n)
-#     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=7)
-#     assert y.shape == (7, setup.model.n_obs)
-
-
-# @pytest.mark.slow("n")
-# def test_sample_moments(setup):
-#     theta = jnp.arange(1.0, setup.model.n + 1)
-#     n = 200_000
-#     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n)
-
-#     mean_hat = y.mean(axis=0)
-#     cov_hat = jnp.cov(y.T)
-
-#     expected_mean = setup.model(theta)
-#     expected_cov = setup.likelihood.Sigma_obs
-
-#     # erreur-type de la moyenne : sigma / sqrt(n)
-#     tol_mean = 5.0 * jnp.sqrt(jnp.diag(expected_cov) / n)
-#     assert jnp.all(jnp.abs(mean_hat - expected_mean) < tol_mean)
-
-#     assert jnp.allclose(cov_hat, expected_cov, atol=5e-2)
-
-
-# @pytest.mark.slow("n")
-# def test_sample_matches_log_likelihood(setup):
-#     """La log-vraisemblance empirique moyenne doit approcher l'entropie
-#     différentielle négative de la gaussienne."""
-#     theta = jnp.ones(setup.model.n)
-#     n_samples = 50_000
-#     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n_samples)
-
-#     ll = jax.vmap(lambda yi: setup.likelihood.log_likelihood(yi, theta))(y)
-
-#     d = setup.model.n_obs
-#     _, logdet = jnp.linalg.slogdet(setup.likelihood.Sigma_obs)
-#     expected = -0.5 * (d * jnp.log(2 * jnp.pi) + logdet + d)
-
-#     assert jnp.abs(ll.mean() - expected) < 0.05

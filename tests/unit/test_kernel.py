@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-import pytest
+import pytest  # type: ignore
 
 from cboed.priors import kernel
 

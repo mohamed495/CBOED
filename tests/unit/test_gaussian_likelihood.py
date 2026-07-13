@@ -92,7 +92,7 @@ def test_whitened_residual(setup: Setup) -> None:
     expected = jsp.linalg.cho_solve(
         jsp.linalg.cho_factor(setup.likelihood.Sigma_obs, lower=True), r
     )
-    computed = setup.likelihood.whitened_residual(y=y, theta=theta)
+    computed = setup.likelihood.precision_weighted_residual(y=y, theta=theta)
     assert jnp.allclose(expected, computed)
     assert isinstance(computed, jax.Array)
 
@@ -107,7 +107,7 @@ def test_grad_log_likelihood(setup: Setup) -> None:
 
     y = setup.model(theta=theta) + r
     op = setup.likelihood.jacobian(theta, None)
-    expected = op.rmatvec(setup.likelihood.whitened_residual(y, theta, None))
+    expected = op.rmatvec(setup.likelihood.precision_weighted_residual(y, theta, None))
     computed = setup.likelihood.grad_log_likelihood(y=y, theta=theta)
     assert jnp.allclose(expected, computed)
     assert isinstance(computed, jax.Array)

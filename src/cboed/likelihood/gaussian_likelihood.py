@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 from beartype import beartype
 from jax import Array
-from jaxtyping import Float, PRNGKeyArray, jaxtyped
+from jaxtyping import Float, Int, PRNGKeyArray, jaxtyped
 
 from cboed.core.base import ForwardModel
 from cboed.core.linear_operator import LinearizedOperator
@@ -35,7 +35,7 @@ class gaussianLikelihood(Likelihood):
         self,
         y: Float[Array, " n_obs"],
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        xi: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, ""]:
         """log p(y | theta, xi) for additive Gaussian noise."""
         n = y.shape[0]
@@ -47,13 +47,18 @@ class gaussianLikelihood(Likelihood):
     def jacobian(
         self,
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        xi: Int[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
         """d(mean)/dtheta = A(xi), matrix-free operator. Independent of y."""
         return self.model.jacobian_operator(theta)  # composé avec H(xi) si besoin
 
     @jaxtyped(typechecker=beartype)
-    def whitened_residual(self, y, theta, xi=None):
+    def precision_weighted_residual(
+        self,
+        y: Float[Array, " n_obs"],
+        theta: Float[Array, " n_param"],
+        xi: Int[Array, " n_sensors"] | None = None,
+    ) -> Float[Array, " n_obs"]:
         """Gamma_obs^{-1} (y - M(theta)). Building block, not a derivative."""
         r = y - self.model(theta)
         return jsp.linalg.cho_solve(self._chol, r)
@@ -63,17 +68,17 @@ class gaussianLikelihood(Likelihood):
         self,
         y: Float[Array, " n_obs"],
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        xi: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, " n_param"]:
         """d(log p)/dtheta = J^T Gamma_obs^{-1} (y - M(theta))."""
         op = self.jacobian(theta, xi)
-        return op.rmatvec(self.whitened_residual(y, theta, xi))
+        return op.rmatvec(self.precision_weighted_residual(y, theta, xi))
 
     @jaxtyped(typechecker=beartype)
     def hessian(
         self,
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        xi: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param n_param"]:
         """d^2(log p)/dtheta^2 = -A^T Gamma_obs^{-1} A, materialized.
 
@@ -87,7 +92,7 @@ class gaussianLikelihood(Likelihood):
     def hessian_operator(
         self,
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        xi: Int[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
         """Same, matrix-free. Nothing is materialized."""
         A = self.model.jacobian_operator(theta=theta, xi=xi)
@@ -102,7 +107,7 @@ class gaussianLikelihood(Likelihood):
         self,
         key: PRNGKeyArray,
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        xi: Int[Array, " n_sensors"] | None = None,
         n_samples: int = 1,
     ) -> Float[Array, "n_samples n_obs"]:
         """Draw y ~ p(· | theta, xi)."""

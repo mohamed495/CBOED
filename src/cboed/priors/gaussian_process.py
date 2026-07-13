@@ -74,7 +74,7 @@ class GaussianProcess:
         return K + self.jitter * jnp.eye(len(x))
 
 
-class gaussianPrior(Prior):
+class GaussianPrior(Prior):
     def __init__(self, **hyperparameters):
         super().__init__(**hyperparameters)
 
