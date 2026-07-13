@@ -63,7 +63,7 @@ class Prior(ABC):
     def log_prior(
         self, y: Float[Array, " n_obs"], theta: Float[Array, " n_param"]
     ) -> Float[Array, ""]:
-        """log p(y | theta, xi)."""
+        """log p(y | theta, design)."""
         ...
 
     @abstractmethod
@@ -73,5 +73,5 @@ class Prior(ABC):
         theta: Float[Array, " n_param"],
         n_samples: int = 1,
     ) -> Float[Array, "n_samples n_obs"]:
-        """Tire y ~ p(· | theta, xi)."""
+        """Tire y ~ p(· | theta, design)."""
         ...

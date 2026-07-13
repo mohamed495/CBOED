@@ -8,9 +8,9 @@ from cboed.core.linear_operator import LinearizedOperator
 
 
 class Likelihood(ABC):
-    """p(y | theta, xi). Owns the observation operator and the noise model.
+    """p(y | theta, design). Owns the observation operator and the noise model.
 
-    The design xi enters here and nowhere else: it selects what is observed,
+    The design design enters here and nowhere else: it selects what is observed,
     leaving the prior and the forward dynamics untouched.
     """
 
@@ -21,9 +21,9 @@ class Likelihood(ABC):
     def jacobian(
         self,
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        design: Float[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
-        """d(mean)/dtheta at (theta, xi), as a matrix-free operator."""
+        """d(mean)/dtheta at (theta, design), as a matrix-free operator."""
         ...
 
     @abstractmethod
@@ -32,9 +32,9 @@ class Likelihood(ABC):
         self,
         y: Float[Array, " n_obs"],
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        design: Float[Array, " n_sensors"] | None = None,
     ) -> Float[Array, ""]:
-        """log p(y | theta, xi)."""
+        """log p(y | theta, design)."""
         ...
 
     @abstractmethod
@@ -42,8 +42,8 @@ class Likelihood(ABC):
         self,
         key: PRNGKeyArray,
         theta: Float[Array, " n_param"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        design: Float[Array, " n_sensors"] | None = None,
         n_samples: int = 1,
     ) -> Float[Array, "n_samples n_obs"]:
-        """Tire y ~ p(· | theta, xi)."""
+        """Tire y ~ p(· | theta, design)."""
         ...

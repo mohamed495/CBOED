@@ -38,7 +38,7 @@ class ForwardModel(ABC):
     def __call__(
         self,
         theta: Float[Array, " n_parameters"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        design: Float[Array, " n_sensors"] | None = None,
     ) -> Float[Array, " n_obs"]:
         """
         Evaluate G(θ, ξ).
@@ -47,7 +47,7 @@ class ForwardModel(ABC):
         ----------
         theta : array (n_params,)
             Model parameter.
-        xi : array (n_sensors, dim)
+        design : array (n_sensors, dim)
             Sensor positions.
 
         Returns
@@ -57,7 +57,7 @@ class ForwardModel(ABC):
         ...
 
     @abstractmethod
-    def jacobian(self, theta, xi):
+    def jacobian(self, theta, design):
         """
         Jacobian ∂G/∂θ at (θ, ξ).
 
@@ -67,10 +67,10 @@ class ForwardModel(ABC):
         """
         ...
 
-    def matvec(self, v, theta, xi):
+    def matvec(self, v, theta, design):
         """J(θ, ξ) · v — default: calls jacobian(). Override for matrix-free."""
-        return self.jacobian(theta, xi) @ v
+        return self.jacobian(theta, design) @ v
 
-    def rmatvec(self, v, theta, xi):
+    def rmatvec(self, v, theta, design):
         """J(θ, ξ)ᵀ · v — default: calls jacobian(). Override for matrix-free."""
-        return self.jacobian(theta, xi).T @ v
+        return self.jacobian(theta, design).T @ v

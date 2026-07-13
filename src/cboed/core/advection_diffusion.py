@@ -7,7 +7,8 @@ from jax import Array
 from jaxtyping import Float, Int
 
 from cboed.core.base import ForwardModel
-from cboed.core.linear_operator import LinearizedOperator
+from cboed.core.linear_operator import LinearizedOperator, compose
+from cboed.core.selection import selection_operator
 
 
 class AdvectionDiffusion(ForwardModel):
@@ -69,24 +70,29 @@ class AdvectionDiffusion(ForwardModel):
 
     @property
     def n_parameters(self) -> int:
+        """Dimension d of parameter θ."""
         return self.n
 
     @property
     def n_obs(self) -> int:
-        return self.n  # etat complet interieur (pas de capteurs ici)
+        """Dimension p of the complete observable Y = u(θ)."""
+        return self.n
 
     def __call__(
         self,
         theta: Float[Array, " n_parameters"],
-        xi: Float[Array, " n_sensors"] | None = None,
-    ) -> Float[Array, " n_obs"]:
-        """G(theta) : etat final interieur a partir de la CI theta."""
-        return self._forward(theta)
+        design: Int[Array, " n_obs"] | None = None,
+    ) -> Float[Array, " ???"]:
+        """G(θ) : état final observé. Sans design, l'état complet Y = u(θ)."""
+        y_full = self._forward(theta)  # Y ∈ ℝᵖ, état complet
+        if design is None:
+            return y_full
+        return y_full[design]  # Yₘ = Wₘᵀ Y ∈ ℝᵐ
 
     def jacobian_operator(
         self,
         theta: Float[Array, " n_parameters"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        design: Float[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
         """dG/dtheta comme opérateur matrix-free.
 
@@ -115,12 +121,16 @@ class AdvectionDiffusion(ForwardModel):
         res = jac(v)
         print(res) # res = [3,1]
         """
-        return self.linearize(theta)
+        G = self.linearize(theta)
+        if design is None:
+            return G
+        H = selection_operator(design, self.n)
+        return compose(H, G)
 
     def jacobian(
         self,
         theta: Float[Array, " n_parameters"],
-        xi: Float[Array, " n_sensors"] | None = None,
+        design: Float[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_obs n_parameters"]:
         """dG/dtheta comme operateur matrix-free (jamais materialise).
         Arguments :
@@ -141,8 +151,8 @@ class AdvectionDiffusion(ForwardModel):
         about the value of theta, only must be compatible to matrix-vector
         product operation
         """
-        op = self.jacobian_operator(theta)
-        return jnp.asarray(jax.vmap(op.matvec)(jnp.eye(self.n)).T)
+        op = self.jacobian_operator(theta, design)
+        return jnp.asarray(jax.vmap(op.matvec)(jnp.eye(self.n_parameters)).T)
 
     # ------------------------------------------------------------------
     # Coeur numerique : pas de Crank-Nicolson

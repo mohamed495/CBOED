@@ -38,6 +38,7 @@ surrogates = { features = ["surrogates"], solve-group = "default" }
 
 [tool.pixi.feature.test.tasks]
 test-unit = {cmd = "pytest tests/unit", description = "Speed unitary test"}
+test-integration = { cmd = "pytest tests/integration", description = "Assembling" }
 test-all = {cmd = "pytest tests/", description = "Test all before each push"}
 
 [tool.pixi.feature.test.dependencies]

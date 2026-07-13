@@ -95,6 +95,11 @@ class GaussianPrior(Prior):
     def prior(self) -> GaussianProcess:
         return self._hyperparameters["prior"]
 
+    # dans GaussianPrior
+    @property
+    def mu(self) -> Float[Array, " n_param"]:
+        return self.prior.mu
+
     @jaxtyped(typechecker=beartype)
     def log_prior(
         self,
@@ -117,6 +122,9 @@ class GaussianPrior(Prior):
         """Gradient of the Gaussian log prior."""
         r = theta - self.prior.mu
         return -jsp.linalg.cho_solve(self._chol, r)
+
+    def log_det_precision(self) -> Float:
+        return -2.0 * jnp.sum(jnp.log(jnp.diag(self._chol[0])))
 
     @jaxtyped(typechecker=beartype)
     def hessian(

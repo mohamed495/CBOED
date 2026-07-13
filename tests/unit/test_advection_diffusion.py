@@ -144,6 +144,17 @@ def test_jacobian_matrix():
     assert jnp.allclose(expected, computed)
 
 
+def test_jacobian_operator_is_exact_for_linear():
+    """Modèle linéaire : J(d) = G(d) - G(0), sans erreur de troncature."""
+    model = AdvectionDiffusion(
+        diffusivity=0.0, velocity=2.0, T=1.0, domain=[0, 1], nt=5, n=4
+    )
+    d = jnp.ones(model.n)
+    J = model.jacobian_operator(jnp.zeros(model.n))
+    # linéaire : G(d) = G(0) + J·d, et G(0)=0 (bords nuls) → J·d = G(d)
+    assert jnp.allclose(J.matvec(d), model(d), atol=1e-12)
+
+
 def test_solve():
     model = AdvectionDiffusion(
         diffusivity=0.0,
@@ -209,3 +220,101 @@ def test_call():
     computed = model(theta=theta)
 
     assert jnp.allclose(computed, expected)
+
+
+def test_jacobian_selects_rows():
+    model = AdvectionDiffusion(
+        diffusivity=0.0,
+        velocity=2.0,
+        T=1,
+        domain=[0, 1],
+        nt=5,
+        n=4,
+    )
+    theta = jnp.ones(model.n)
+    full = model.jacobian(theta)  # (n, n_param)
+    design = jnp.array([0, 2])
+    selected = model.jacobian(theta, design)  # (2, n_param)
+    assert selected.shape == (2, model.n_parameters)
+    assert jnp.allclose(selected, full[design])
+
+
+def test_selection_extracts_correct_rows():
+    model = AdvectionDiffusion(
+        diffusivity=0.0, velocity=2.0, T=1, domain=[0, 1], nt=5, n=4
+    )
+    theta = jnp.ones(model.n)
+    full = model.jacobian(theta)
+    for design in [jnp.array([0]), jnp.array([1, 3]), jnp.array([0, 1, 2, 3])]:
+        sel = model.jacobian(theta, design)
+        assert sel.shape == (len(design), model.n_parameters)
+        assert jnp.allclose(sel, full[design])
+
+
+def test_selection_full_equals_no_selection():
+    """design = tous les indices ⟺ pas de sélection."""
+    model = AdvectionDiffusion(
+        diffusivity=0.0, velocity=2.0, T=1, domain=[0, 1], nt=5, n=4
+    )
+    theta = jnp.ones(model.n)
+    full = model.jacobian(theta)
+    all_idx = model.jacobian(theta, jnp.arange(model.n))
+    assert jnp.allclose(full, all_idx)
+
+
+def test_selection_order_matters():
+    """design=[2,0] sélectionne dans cet ordre, pas trié."""
+    model = AdvectionDiffusion(
+        diffusivity=0.0, velocity=2.0, T=1, domain=[0, 1], nt=5, n=4
+    )
+    theta = jnp.ones(model.n)
+    full = model.jacobian(theta)
+    sel = model.jacobian(theta, jnp.array([2, 0]))
+    assert jnp.allclose(sel[0], full[2])
+    assert jnp.allclose(sel[1], full[0])
+
+
+def test_selected_operator_adjoint():
+    """⟨H∘G v, w⟩ = ⟨v, (H∘G)ᵀ w⟩ avec sélection."""
+    model = AdvectionDiffusion(
+        diffusivity=0.0, velocity=2.0, T=1, domain=[0, 1], nt=5, n=4
+    )
+    theta = jnp.ones(model.n)
+    design = jnp.array([0, 2])
+    op = model.jacobian_operator(theta, design)
+
+    v = jnp.arange(1.0, model.n + 1)  # espace param (n_param)
+    w = jnp.arange(1.0, len(design) + 1)  # espace obs (n_obs)
+
+    lhs = jnp.dot(op.matvec(v), w)
+    rhs = jnp.dot(v, op.rmatvec(w))
+    assert jnp.allclose(lhs, rhs)
+
+
+def test_operator_matches_dense_with_selection():
+    """jacobian_operator(design) et jacobian(design) cohérents."""
+    model = AdvectionDiffusion(
+        diffusivity=0.0, velocity=2.0, T=1, domain=[0, 1], nt=5, n=4
+    )
+    theta = jnp.ones(model.n)
+    design = jnp.array([1, 3])
+    op = model.jacobian_operator(theta, design)
+    dense = model.jacobian(theta, design)
+
+    v = jnp.arange(1.0, model.n + 1)
+    assert jnp.allclose(op.matvec(v), dense @ v)
+
+
+def test_forward_applies_design():
+    model = AdvectionDiffusion(
+        diffusivity=0.0, velocity=2.0, T=1, domain=[0, 1], nt=5, n=4
+    )
+    theta = jnp.ones(model.n)
+
+    y_full = model(theta)  # ℝᵖ, p=4
+    assert y_full.shape == (4,)
+
+    design = jnp.array([0, 2])
+    y_obs = model(theta, design)  # ℝᵐ, m=2
+    assert y_obs.shape == (2,)
+    assert jnp.allclose(y_obs, y_full[design])  # Yₘ = Wₘᵀ Y

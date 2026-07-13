@@ -35,3 +35,13 @@ class LinearizedOperator:
     def T(self) -> "LinearizedOperator":
         n_out, n_in = self.shape
         return LinearizedOperator(self._rmv, self._mv, (n_in, n_out))
+
+
+def compose(outer, inner):
+    def matvec(v):
+        return outer.matvec(inner.matvec(v))
+
+    def rmatvec(w):
+        return inner.rmatvec(outer.rmatvec(w))  # (H∘G)ᵀ = Gᵀ∘Hᵀ
+
+    return LinearizedOperator(matvec, rmatvec, (outer.shape[0], inner.shape[1]))

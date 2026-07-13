@@ -12,27 +12,22 @@ class InferenceModel(ABC):
         self._hyperparameters = hyperparameters
 
     @abstractmethod
-    def posterior(self, y, xi):
-        """Posterior p(theta | y, xi), in whatever form the
+    def posterior(self, y, design):
+        """Posterior p(theta | y, design), in whatever form the
         strategy provides.
         """
         ...
 
     @abstractmethod
-    def _mu(self, theta, xi=None):
-        """Posterior p(theta | y, xi), in whatever form the
+    def _mu(self, theta, design=None):
+        """Posterior p(theta | y, design), in whatever form the
         strategy provides.
         """
         ...
 
     @abstractmethod
-    def _cov(self, theta, xi=None):
-        """Posterior p(theta | y, xi), in whatever form the
+    def _cov(self, theta, design=None):
+        """Posterior p(theta | y, design), in whatever form the
         strategy provides.
         """
-        ...
-
-    @abstractmethod
-    def expected_information_gain(self, xi=None):
-        """EIG of design xi."""
         ...
