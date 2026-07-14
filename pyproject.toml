@@ -38,7 +38,8 @@ surrogates = { features = ["surrogates"], solve-group = "default" }
 
 [tool.pixi.feature.test.tasks]
 test-unit = {cmd = "pytest tests/unit", description = "Speed unitary test"}
-test-integration = { cmd = "pytest tests/integration", description = "Assembling" }
+test-integration = { cmd = "pytest tests/integration -m 'not slow'", description = "Assembling" }
+test-slow = { cmd = "pytest tests/ -m slow", description = "Heavy Monte-Carlo" }
 test-all = {cmd = "pytest tests/", description = "Test all before each push"}
 
 [tool.pixi.feature.test.dependencies]
@@ -73,3 +74,6 @@ src = ["src"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "RUF"]
 ignore = ["F722"]
+
+[tool.pytest.ini_options]
+markers = ["slow: tests Monte-Carlo longs"]

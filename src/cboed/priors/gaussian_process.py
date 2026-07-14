@@ -97,6 +97,11 @@ class GaussianPrior(Prior):
 
     # dans GaussianPrior
     @property
+    def Sigma(self) -> Float[Array, "n_param n_param"]:
+        return self.prior.Sigma
+
+    # dans GaussianPrior
+    @property
     def mu(self) -> Float[Array, " n_param"]:
         return self.prior.mu
 

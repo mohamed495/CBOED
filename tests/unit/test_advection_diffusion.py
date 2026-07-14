@@ -1,10 +1,7 @@
-import jax
 import jax.numpy as jnp
 
 from cboed.core.advection_diffusion import AdvectionDiffusion
 from cboed.core.linear_operator import LinearizedOperator
-
-jax.config.update("jax_enable_x64", True)
 
 
 def test_properties():
