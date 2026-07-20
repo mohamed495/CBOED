@@ -31,9 +31,7 @@ def setup() -> Setup:
     prior = GaussianProcess(
         kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(model.n)
     )
-    likelihood = GaussianLikelihood(
-        model=model, prior=prior, Sigma_obs=jnp.eye(model.n)
-    )
+    likelihood = GaussianLikelihood(model=model, prior=prior, Sigma_obs=jnp.eye(model.n))
     gaussian_prior = GaussianPrior(prior=prior)
     inference = LinearModel(prior=gaussian_prior, likelihood=likelihood)
     return Setup(model, prior, likelihood, inference)

@@ -33,14 +33,14 @@ class NestedMonteCarloEIG(EIGEstimator):
         # boucle externe : θᵢ ~ prior,  yᵢ ~ p(·|θᵢ)
         thetas = self.prior.sample(k_theta, n_outer)  # (N, d)
         keys_y = jax.random.split(k_y, n_outer)
-        ys = jax.vmap(
-            lambda th, k: self.likelihood.sample(k, th, design, n_samples=1)[0]
-        )(thetas, keys_y)  # (N, m)
+        ys = jax.vmap(lambda th, k: self.likelihood.sample(k, th, design, n_samples=1)[0])(
+            thetas, keys_y
+        )  # (N, m)
 
         # log p(yᵢ | θᵢ)
-        log_lik_matched = jax.vmap(
-            lambda y, th: self.likelihood.log_likelihood(y, th, design)
-        )(ys, thetas)  # (N,)
+        log_lik_matched = jax.vmap(lambda y, th: self.likelihood.log_likelihood(y, th, design))(
+            ys, thetas
+        )  # (N,)
 
         # log p̂(yᵢ) = logmeanexp_j log p(yᵢ | θⱼ),  θⱼ ~ prior
         thetas_inner = self.prior.sample(k_inner, n_inner)  # (M, d)

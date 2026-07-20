@@ -97,6 +97,37 @@ Optional (neural surrogates):
 pixi install --environment surrogates
 ```
 
+### GPU (CUDA cluster, e.g. GRICAD)
+
+No line in `cboed` forces `jax` onto the CPU (`jax_enable_x64` is the only
+global config, in `cboed/__init__.py`) -- placing `jaxlib`'s CUDA build in the
+environment is enough, no code change needed. `jax`/`jaxlib` 0.10.2 has a
+matching `cuda129` build on `conda-forge`.
+
+**Do this directly on the cluster, not on a machine without a GPU.** pixi
+0.71.1 ties CUDA-capable virtual packages (`__cuda`) to the *platform*
+(`linux-64`), not to an individual feature or environment: adding a `gpu`
+feature with `system-requirements = { cuda = "12.9" }` to this repo's
+`pyproject.toml` makes **every** environment on `linux-64` -- including
+`test`, used for local dev -- require a CUDA-capable machine to install,
+even if that environment never touches `jaxlib-cuda`. Tested and confirmed on
+this dev machine (no GPU): `test` stopped installing as soon as that feature
+was added, before any GPU-specific dependency was even requested.
+
+Practical consequence: keep the GPU setup **local to the cluster checkout**
+(uncommitted change, or a dedicated branch never merged back) rather than in
+the shared `pyproject.toml` this laptop also uses:
+
+```bash
+# on the cluster, in your checkout
+pixi add --feature gpu "jaxlib=0.10.2=cuda129*"
+pixi run --environment gpu python -c "import jax; print(jax.devices())"
+```
+
+If `nvidia-smi` reports a different driver version than 12.9, adjust the
+version constraint (`pixi search -c conda-forge "jaxlib=0.10.2=*cuda*"` lists
+the available builds).
+
 ---
 
 ## Project structure

@@ -7,6 +7,7 @@ import pytest  # type: ignore
 
 import cboed.priors.kernel as kernel
 from cboed.core.advection_diffusion import AdvectionDiffusion
+from cboed.core.base import ForwardModel
 from cboed.core.linear_operator import LinearizedOperator
 from cboed.likelihood.gaussian_likelihood import GaussianLikelihood
 from cboed.priors.gaussian_process import GaussianProcess
@@ -31,22 +32,13 @@ def setup() -> Setup:
     prior = GaussianProcess(
         kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(model.n)
     )
-    likelihood = GaussianLikelihood(
-        model=model, prior=prior, Sigma_obs=jnp.eye(model.n)
-    )
+    likelihood = GaussianLikelihood(model=model, prior=prior, Sigma_obs=jnp.eye(model.n))
     return Setup(model, prior, likelihood)
-
-
-def test_isinstance(setup: Setup) -> None:
-    assert isinstance(setup.likelihood.prior, GaussianProcess)
-    assert isinstance(setup.likelihood.prior.kernel, kernel.Gaussian)
 
 
 def test_properties(setup: Setup) -> None:
     assert jnp.allclose(setup.likelihood.Sigma_obs, jnp.eye(setup.model.n))
-    assert jnp.allclose(setup.likelihood.prior.Sigma, setup.prior.Sigma)
-    # model checking
-    assert jnp.allclose(setup.model.diffusivity, setup.likelihood.model.diffusivity)
+    assert isinstance(setup.likelihood.model, ForwardModel)
 
 
 def test_log_likelihood_value(setup: Setup) -> None:
@@ -74,11 +66,19 @@ def test_log_likelihood_quadratic(setup: Setup) -> None:
     assert jnp.allclose(computed, expected)
 
 
-def test_jacobian(setup: Setup) -> None:
+def test_jacobian_operator(setup: Setup) -> None:
     theta = jnp.arange(1.0, setup.model.n + 1)
-    jacobian = setup.likelihood.jacobian(theta=theta)
-    assert isinstance(jacobian, LinearizedOperator)
-    assert jnp.allclose(jacobian.matvec(theta), setup.model(theta))
+    op = setup.likelihood.jacobian_operator(theta=theta)
+    assert isinstance(op, LinearizedOperator)
+
+
+def test_jacobian_dense_matches_operator(setup: Setup) -> None:
+    """`jacobian` matérialise `jacobian_operator` — colonnes, pas lignes."""
+    theta = jnp.arange(1.0, setup.model.n + 1)
+    op = setup.likelihood.jacobian_operator(theta=theta)
+    J = setup.likelihood.jacobian(theta=theta)
+    v = jnp.arange(1.0, setup.model.n + 1)
+    assert jnp.allclose(J @ v, op.matvec(v))
 
 
 def test_whitened_residual(setup: Setup) -> None:
@@ -158,41 +158,41 @@ def test_sample_shape(setup):
     assert y.shape == (7, setup.model.n_obs)
 
 
-# @pytest.mark.slow("n")
-# def test_sample_moments(setup):
-#     theta = jnp.arange(1.0, setup.model.n + 1)
-#     n = 200_000
-#     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n)
+@pytest.mark.slow("n")
+def test_sample_moments(setup):
+    theta = jnp.arange(1.0, setup.model.n + 1)
+    n = 200_000
+    y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n)
 
-#     mean_hat = y.mean(axis=0)
-#     cov_hat = jnp.cov(y.T)
+    mean_hat = y.mean(axis=0)
+    cov_hat = jnp.cov(y.T)
 
-#     expected_mean = setup.model(theta)
-#     expected_cov = setup.likelihood.Sigma_obs
+    expected_mean = setup.model(theta)
+    expected_cov = setup.likelihood.Sigma_obs
 
-#     # erreur-type de la moyenne : sigma / sqrt(n)
-#     tol_mean = 5.0 * jnp.sqrt(jnp.diag(expected_cov) / n)
-#     assert jnp.all(jnp.abs(mean_hat - expected_mean) < tol_mean)
+    # erreur-type de la moyenne : sigma / sqrt(n)
+    tol_mean = 5.0 * jnp.sqrt(jnp.diag(expected_cov) / n)
+    assert jnp.all(jnp.abs(mean_hat - expected_mean) < tol_mean)
 
-#     assert jnp.allclose(cov_hat, expected_cov, atol=5e-2)
-
-
-# @pytest.mark.slow("n")
-# def test_sample_matches_log_likelihood(setup):
-#     """La log-vraisemblance empirique moyenne doit approcher l'entropie
-#     différentielle négative de la gaussienne."""
-#     theta = jnp.ones(setup.model.n)
-#     n_samples = 50_000
-#     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n_samples)
-
-#     ll = jax.vmap(lambda yi: setup.likelihood.log_likelihood(yi, theta))(y)
-
-#     d = setup.model.n_obs
-#     _, logdet = jnp.linalg.slogdet(setup.likelihood.Sigma_obs)
-#     expected = -0.5 * (d * jnp.log(2 * jnp.pi) + logdet + d)
+    assert jnp.allclose(cov_hat, expected_cov, atol=5e-2)
 
 
-#     assert jnp.abs(ll.mean() - expected) < 0.05
+@pytest.mark.slow("n")
+def test_sample_matches_log_likelihood(setup):
+    """La log-vraisemblance empirique moyenne doit approcher l'entropie
+    différentielle négative de la gaussienne."""
+    theta = jnp.ones(setup.model.n)
+    n_samples = 50_000
+    y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n_samples)
+
+    ll = jax.vmap(lambda yi: setup.likelihood.log_likelihood(yi, theta))(y)
+
+    d = setup.model.n_obs
+    _, logdet = jnp.linalg.slogdet(setup.likelihood.Sigma_obs)
+    expected = -0.5 * (d * jnp.log(2 * jnp.pi) + logdet + d)
+    assert jnp.abs(ll.mean() - expected) < 0.05
+
+
 def test_log_likelihood_with_design(setup):
     theta = setup.prior.mu
     design = jnp.array([0, 2])

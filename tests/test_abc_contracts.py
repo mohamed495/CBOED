@@ -1,0 +1,152 @@
+"""Verrous sur les contrats : ce sont eux qui ont coûté le plus cher.
+
+Python ne vérifie que le **nom** des méthodes abstraites, jamais leur
+signature : les trois ABC ont ainsi porté pendant des mois des signatures
+qu'aucune implémentation ne respectait (`Prior.log_prior(y, theta)` contre
+`GaussianPrior.log_prior(theta)`, `InferenceModel._mu(theta, design)` contre
+`LinearModel._mu(y, theta, design)`). Ces tests remplacent la vigilance.
+"""
+
+import ast
+import inspect
+import textwrap
+
+import jax.numpy as jnp
+import pytest  # type: ignore
+
+from cboed.criteria.optimality import EIG, AOptimal, DOptimal
+from cboed.inference.base import InferenceModel
+from cboed.inference.goal_oriented import GoalOrientedModel
+from cboed.inference.linear_model import LinearModel
+from cboed.likelihood.base import Likelihood
+from cboed.likelihood.gaussian_likelihood import GaussianLikelihood
+from cboed.priors.base import Prior
+from cboed.priors.gaussian_process import GaussianPrior
+from cboed.priors.kernel import Gaussian, Matern12, Matern32, Matern52
+
+
+def _called_names(cls) -> set[str]:
+    """Noms de fonctions réellement appelées dans le corps de `cls`.
+
+    Via l'AST et non le texte : les docstrings sont des `Constant`, donc
+    ignorées. Un grep sur `inspect.getsource` confond une explication avec
+    un appel -- c'est exactement ce qu'il ne faut pas faire.
+    """
+    tree = ast.parse(textwrap.dedent(inspect.getsource(cls)))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name):
+                names.add(func.id)
+            elif isinstance(func, ast.Attribute):
+                names.add(func.attr)
+    return names
+
+
+FORBIDDEN_IN_CRITERIA = frozenset(
+    {"eigvalsh", "eigh", "eig", "cho_factor", "cho_solve", "cholesky", "slogdet", "inv"}
+)
+
+
+@pytest.mark.parametrize("cls", [EIG, DOptimal, AOptimal])
+def test_criteria_do_no_linear_algebra(cls):
+    """Les critères consomment le contrat, ils ne factorisent pas eux-mêmes."""
+    offending = _called_names(cls) & FORBIDDEN_IN_CRITERIA
+    assert not offending, f"{cls.__name__} appelle {sorted(offending)}"
+
+
+ABC_IMPLEMENTATIONS = [
+    (Prior, GaussianPrior),
+    (InferenceModel, LinearModel),
+    (InferenceModel, GoalOrientedModel),
+    (Likelihood, GaussianLikelihood),
+]
+
+
+def _abstract_methods(abc_cls):
+    return sorted(getattr(abc_cls, "__abstractmethods__", frozenset()))
+
+
+@pytest.mark.parametrize(("abc_cls", "impl_cls"), ABC_IMPLEMENTATIONS)
+def test_abstract_signatures_match_implementation(abc_cls, impl_cls):
+    """Chaque méthode abstraite a la même signature dans l'implémentation."""
+    for name in _abstract_methods(abc_cls):
+        abc_attr = getattr(abc_cls, name)
+        impl_attr = getattr(impl_cls, name)
+        if isinstance(abc_attr, property):
+            assert isinstance(impl_attr, property), f"{impl_cls.__name__}.{name}"
+            continue
+        expected = list(inspect.signature(abc_attr).parameters)
+        actual = list(inspect.signature(impl_attr).parameters)
+        assert actual == expected, (
+            f"{impl_cls.__name__}.{name}{tuple(actual)} "
+            f"!= {abc_cls.__name__}.{name}{tuple(expected)}"
+        )
+
+
+def test_goal_oriented_inherits_the_contract():
+    """Le duck typing est mort : le wrapper implémente le contrat."""
+    assert issubclass(GoalOrientedModel, InferenceModel)
+
+
+def test_inference_contract_declares_only_what_is_consumed():
+    """`posterior`, `_mu`, `_cov` ne sont plus des promesses d'interface."""
+    declared = set(_abstract_methods(InferenceModel))
+    assert declared == {
+        "log_det_posterior_precision",
+        "log_det_prior_precision",
+        "posterior_cov_matmul",
+    }
+
+
+def test_no_design_in_prior_contract():
+    """Le design touche les données, jamais ce qui touche seulement theta."""
+    for name in _abstract_methods(Prior):
+        attr = getattr(Prior, name)
+        if isinstance(attr, property):
+            continue
+        params = inspect.signature(attr).parameters
+        assert "design" not in params, f"Prior.{name} prend un design"
+        assert "y" not in params, f"Prior.{name} prend un y"
+
+
+@pytest.mark.parametrize("kernel_cls", [Gaussian, Matern12, Matern32, Matern52])
+def test_no_redundant_kernel_init(kernel_cls):
+    """Les noyaux simples n'ont pas d'__init__ propre -- la base suffit."""
+    assert "__init__" not in vars(kernel_cls)
+
+
+@pytest.mark.parametrize("kernel_cls", [Gaussian, Matern12, Matern32, Matern52])
+def test_no_kernel_overrides_shared_hyperparameters(kernel_cls):
+    """length_scale / sigma vivent dans KernelBase, nulle part ailleurs."""
+    assert "length_scale" not in vars(kernel_cls)
+    assert "sigma" not in vars(kernel_cls)
+
+
+def test_unknown_hyperparameter_rejected():
+    with pytest.raises(TypeError, match="unexpected"):
+        Gaussian(length_scale=0.2, sigma=1.0, period=2.0)
+
+
+@pytest.mark.parametrize("bad", [{"length_scale": 0.0}, {"length_scale": -1.0}, {"sigma": 0.0}])
+def test_nonpositive_hyperparameters_rejected(bad):
+    with pytest.raises(ValueError):
+        Gaussian(**{"length_scale": 1.0, "sigma": 1.0, **bad})
+
+
+def test_gaussian_prior_does_not_invert_at_construction():
+    """L'ancien `_H = -cho_solve(chol, eye(n))` matérialisait a l'init."""
+    src = inspect.getsource(GaussianPrior.__init__)
+    assert "cho_solve" not in src
+    assert "_H" not in src
+
+
+def test_prior_hessian_is_negative_precision():
+    """Oracle : hessian() == -Gamma_prior^{-1}, matérialisé a la demande."""
+    from cboed.priors.gaussian_process import GaussianProcess
+
+    gp = GaussianProcess(Matern32(length_scale=0.3, sigma=1.0), jnp.zeros(8))
+    prior = GaussianPrior(prior=gp)
+    identity = prior.Sigma() @ (-prior.hessian())
+    assert jnp.allclose(identity, jnp.eye(8), atol=1e-8)

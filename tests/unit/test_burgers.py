@@ -24,13 +24,9 @@ def setup() -> Setup:
         n=4,
     )
 
-    burgers_model = Burgers(
-        diffusivity=1.0, lambda_=1.0, T=1.0, domain=[0, 1], nt=5, n=4
-    )
+    burgers_model = Burgers(diffusivity=1.0, lambda_=1.0, T=1.0, domain=[0, 1], nt=5, n=4)
 
-    burgers_diffusion_model = Burgers(
-        diffusivity=1.0, lambda_=0.0, T=1.0, domain=[0, 1], nt=5, n=4
-    )
+    burgers_diffusion_model = Burgers(diffusivity=1.0, lambda_=0.0, T=1.0, domain=[0, 1], nt=5, n=4)
     return Setup(
         burgers_diffusion_model=burgers_diffusion_model,
         burgers_model=burgers_model,

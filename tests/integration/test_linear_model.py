@@ -31,9 +31,7 @@ def setup() -> Setup:
     prior = GaussianProcess(
         kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(model.n)
     )
-    likelihood = GaussianLikelihood(
-        model=model, prior=prior, Sigma_obs=jnp.eye(model.n)
-    )
+    likelihood = GaussianLikelihood(model=model, prior=prior, Sigma_obs=jnp.eye(model.n))
     gaussian_prior = GaussianPrior(prior=prior)
     inference = LinearModel(prior=gaussian_prior, likelihood=likelihood)
     return Setup(model, prior, likelihood, inference)
@@ -92,12 +90,8 @@ def test_posterior_mean_recovers_truth_noiseless(setup):
 
 def test_cov_with_anisotropic_noise():
     """Oracle avec Σ_obs non triviale — discrimine les erreurs que I masque."""
-    model = AdvectionDiffusion(
-        diffusivity=0.0, velocity=2.0, T=1.0, domain=[0, 1], nt=5, n=4
-    )
-    prior_gp = GaussianProcess(
-        kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(4)
-    )
+    model = AdvectionDiffusion(diffusivity=0.0, velocity=2.0, T=1.0, domain=[0, 1], nt=5, n=4)
+    prior_gp = GaussianProcess(kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(4))
     Sigma_obs = jnp.diag(jnp.array([1.0, 2.0, 3.0, 4.0]))
     lik = GaussianLikelihood(model=model, prior=prior_gp, Sigma_obs=Sigma_obs)
     inf = LinearModel(prior=GaussianPrior(prior=prior_gp), likelihood=lik)
@@ -123,3 +117,34 @@ def test_cov_computed_from_model(setup):
     assert isinstance(A, jax.Array)
     assert jnp.allclose(computed, expected, atol=1e-8)
     assert jnp.allclose(precision, setup.inference.posterior_precision(theta))
+
+def test_mu(setup: Setup) -> None:
+    """Posterior mean agrees with the closed-form Gaussian formula."""
+
+    theta_true = jnp.array([0.5, -1.0, 2.0, 0.2])
+
+    # observations sans bruit
+    y = setup.model(theta_true)
+
+    # point de linéarisation
+    theta_lin = jnp.zeros_like(theta_true)
+
+    mu = setup.inference._mu(
+        y=y,
+        theta=theta_lin,
+    )
+
+    # formule analytique
+    H = setup.inference.posterior_precision(theta_lin)
+
+    grad_post = (
+        setup.likelihood.grad_log_likelihood(
+            y=y,
+            theta=theta_lin,
+        )
+        + setup.inference.prior.grad_log_prior(theta_lin)
+    )
+
+    mu_expected = theta_lin + jnp.linalg.solve(H, grad_post)
+
+    assert jnp.allclose(mu, mu_expected, atol=1e-8)

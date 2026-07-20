@@ -1,3 +1,11 @@
+# src/cboed/priors/kernel.py
+"""Noyaux de covariance stationnaires pour les priors gaussiens.
+
+Tous les noyaux héritent de :class:`KernelBase`, qui porte ``length_scale``,
+``sigma``, leur validation et ``_pairwise_distance``. Un noyau sans
+hyperparamètre supplémentaire se réduit à son ``__call__``.
+"""
+
 import jax.numpy as jnp
 from jax import Array
 from jaxtyping import Float
@@ -6,20 +14,22 @@ from cboed.priors.base import KernelBase
 
 
 class Gaussian(KernelBase):
-    """
-    RBF/Gaussian kernel.
+    r"""Noyau gaussien (RBF, exponentielle quadratique).
 
     .. math::
-        k(x, x') = \\sigma^2 \\exp\\left(-\\frac{\\|x - x'\\|^2}{2\\ell^2}\\right)
+        k(x, x') = \sigma^2 \exp\left(-\frac{|x - x'|^2}{2\ell^2}\right)
 
-    Infinitely differentiable, very smooth.
+    Infiniment différentiable. Décroissance spectrale super-exponentielle : la
+    Gram devient numériquement de rang déficient sur grille fine, ce qui en
+    fait un noyau de cas-jouet plutôt qu'un prior réaliste en haute dimension
+    (préférer les Matérn).
 
     Parameters
     ----------
     length_scale : float
-        Correlation length
+        Longueur de corrélation :math:`\ell`.
     sigma : float
-        Signal variance
+        Écart-type du signal :math:`\sigma`.
 
     Examples
     --------
@@ -27,227 +37,176 @@ class Gaussian(KernelBase):
     >>> K = kernel(x1, x2)
     """
 
-    def __init__(self, length_scale: float, sigma: float) -> None:
-        super().__init__(length_scale=length_scale, sigma=sigma)
-
-    @property
-    def length_scale(self) -> float:
-        return self._hyperparameters["length_scale"]
-
-    @property
-    def sigma(self) -> float:
-        return self._hyperparameters["sigma"]
-
-    def __call__(
-        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
-    ) -> Float[Array, "n m"]:
-        d = jnp.abs(jnp.subtract.outer(x1, x2))
+    def __call__(self, x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
+        d = self._pairwise_distance(x1, x2)
         return (self.sigma**2) * jnp.exp(-(d**2) / (2 * self.length_scale**2))
 
 
 class Matern12(KernelBase):
-    """
-    Matérn kernel with v=1/2 (Exponential kernel).
+    r"""Noyau de Matérn :math:`\nu = 1/2` (exponentiel, Ornstein-Uhlenbeck).
 
-    k(x, x') = sigma^2 exp(-|x - x'| / l)
+    .. math::
+        k(x, x') = \sigma^2 \exp\left(-\frac{|x - x'|}{\ell}\right)
 
-    Once differentiable in mean square.
+    Continu mais nulle part différentiable en moyenne quadratique : les
+    trajectoires sont les plus rugueuses de la famille.
 
     Parameters
     ----------
     length_scale : float
-        Correlation length l
+        Longueur de corrélation :math:`\ell`.
     sigma : float
-        Signal variance
+        Écart-type du signal :math:`\sigma`.
 
     Examples
     --------
     >>> kernel = Matern12(length_scale=0.1, sigma=1.5)
-    >>> K = kernel(x, x')
+    >>> K = kernel(x1, x2)
     """
 
-    def __init__(self, length_scale: float, sigma: float) -> None:
-        super().__init__(length_scale=length_scale, sigma=sigma)
-
-    def __call__(
-        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
-    ) -> Float[Array, "n m"]:
-        d = jnp.abs(jnp.subtract.outer(x1, x2))
+    def __call__(self, x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
+        d = self._pairwise_distance(x1, x2)
         return (self.sigma**2) * jnp.exp(-d / self.length_scale)
-
-    @property
-    def length_scale(self) -> float:
-        return self._hyperparameters["length_scale"]
-
-    @property
-    def sigma(self) -> float:
-        return self._hyperparameters["sigma"]
 
 
 class Matern32(KernelBase):
-    """
-    Matérn kernel with v=3/2.
+    r"""Noyau de Matérn :math:`\nu = 3/2`.
 
-    k(x, x') = sigma^2 (1 + √3r/l) exp(-√3r/l)
+    .. math::
+        k(x, x') = \sigma^2 \left(1 + \frac{\sqrt{3}\,r}{\ell}\right)
+                   \exp\left(-\frac{\sqrt{3}\,r}{\ell}\right),
+        \qquad r = |x - x'|
 
-    Once differentiable.
+    Une fois différentiable en moyenne quadratique.
 
     Parameters
     ----------
     length_scale : float
-        Correlation length l
+        Longueur de corrélation :math:`\ell`.
     sigma : float
-        Signal variance
+        Écart-type du signal :math:`\sigma`.
 
     Examples
     --------
     >>> kernel = Matern32(length_scale=0.1, sigma=1.5)
-    >>> K = kernel(x, x')
+    >>> K = kernel(x1, x2)
     """
 
-    def __init__(self, length_scale: float, sigma: float) -> None:
-        super().__init__(length_scale=length_scale, sigma=sigma)
-
-    def __call__(
-        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
-    ) -> Float[Array, "n m"]:
-        d = jnp.abs(jnp.subtract.outer(x1, x2))
-        r = jnp.sqrt(3) * d / self.length_scale
-        return (self.sigma**2) * (1 + r) * jnp.exp(-r)
-
-    @property
-    def length_scale(self) -> float:
-        return self._hyperparameters["length_scale"]
-
-    @property
-    def sigma(self) -> float:
-        return self._hyperparameters["sigma"]
+    def __call__(self, x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
+        d = self._pairwise_distance(x1, x2)
+        r = jnp.sqrt(3.0) * d / self.length_scale
+        return (self.sigma**2) * (1.0 + r) * jnp.exp(-r)
 
 
 class Matern52(KernelBase):
-    """
-    Matérn kernel with v=5/2.
+    r"""Noyau de Matérn :math:`\nu = 5/2`.
 
-    k(x, x') = sigma^2 (1 + √5r/l + 5r²/(3l^2)) exp(-√5r/l)
+    .. math::
+        k(x, x') = \sigma^2 \left(1 + \frac{\sqrt{5}\,r}{\ell}
+                   + \frac{5r^2}{3\ell^2}\right)
+                   \exp\left(-\frac{\sqrt{5}\,r}{\ell}\right),
+        \qquad r = |x - x'|
 
-    Twice differentiable.
+    Deux fois différentiable en moyenne quadratique.
 
     Parameters
     ----------
     length_scale : float
-        Correlation length l
+        Longueur de corrélation :math:`\ell`.
     sigma : float
-        Signal variance
+        Écart-type du signal :math:`\sigma`.
 
     Examples
     --------
     >>> kernel = Matern52(length_scale=0.1, sigma=1.5)
-    >>> K = kernel(x, x')
+    >>> K = kernel(x1, x2)
     """
 
-    def __init__(self, length_scale: float, sigma: float) -> None:
-        super().__init__(length_scale=length_scale, sigma=sigma)
-
-    def __call__(
-        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
-    ) -> Float[Array, "n m"]:
-        d = jnp.abs(jnp.subtract.outer(x1, x2))
-        r = jnp.sqrt(5) * d / self.length_scale
-        return (self.sigma**2) * (1 + r + r**2 / 3) * jnp.exp(-r)
-
-    @property
-    def length_scale(self) -> float:
-        return self._hyperparameters["length_scale"]
-
-    @property
-    def sigma(self) -> float:
-        return self._hyperparameters["sigma"]
+    def __call__(self, x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
+        d = self._pairwise_distance(x1, x2)
+        r = jnp.sqrt(5.0) * d / self.length_scale
+        return (self.sigma**2) * (1.0 + r + r**2 / 3.0) * jnp.exp(-r)
 
 
 class RationalQuadratic(KernelBase):
-    """
-    Rational quadratic kernel (mixture of SE kernels).
+    r"""Noyau rationnel quadratique — mélange continu de noyaux RBF.
 
-    k(x, x') = sigma^2 (1 + ||x-x'||²/(2alpha l^2))^(-alpha)
+    .. math::
+        k(x, x') = \sigma^2 \left(1 + \frac{|x - x'|^2}
+                   {2\alpha\ell^2}\right)^{-\alpha}
+
+    Mélange d'échelles de corrélation. Tend vers :class:`Gaussian` quand
+    :math:`\alpha \to \infty`.
 
     Parameters
     ----------
     length_scale : float
-        Correlation length l
+        Longueur de corrélation :math:`\ell`.
     sigma : float
-        Signal variance
+        Écart-type du signal :math:`\sigma`.
     alpha : float
+        Paramètre de mélange :math:`\alpha`. Doit être strictement positif.
 
     Examples
     --------
     >>> kernel = RationalQuadratic(length_scale=0.1, sigma=1.5, alpha=1.0)
-    >>> K = kernel(x, x')
+    >>> K = kernel(x1, x2)
     """
 
+    _extra_params = frozenset({"alpha"})
+
     def __init__(self, length_scale: float, sigma: float, alpha: float) -> None:
-        super().__init__(length_scale=length_scale, sigma=sigma, alpha=alpha)
-
-    def __call__(
-        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
-    ) -> Float[Array, "n m"]:
-        d = jnp.abs(jnp.subtract.outer(x1, x2))
-        return (self.sigma**2) * (
-            1 + d**2 / (2 * self.alpha * self.length_scale**2)
-        ) ** (-self.alpha)
-
-    @property
-    def length_scale(self) -> float:
-        return self._hyperparameters["length_scale"]
-
-    @property
-    def sigma(self) -> float:
-        return self._hyperparameters["sigma"]
+        if alpha <= 0:
+            raise ValueError(f"alpha must be > 0, got {alpha}")
+        super().__init__(length_scale, sigma, alpha=alpha)
 
     @property
     def alpha(self) -> float:
         return self._hyperparameters["alpha"]
 
+    def __call__(self, x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
+        d = self._pairwise_distance(x1, x2)
+        base = 1.0 + d**2 / (2.0 * self.alpha * self.length_scale**2)
+        return (self.sigma**2) * base ** (-self.alpha)
+
 
 class Periodic(KernelBase):
-    """
-    Periodic kernel for periodic phenomena.
+    r"""Noyau périodique (exp-sine-squared).
 
-    k(x, x') = sigma^2 exp(-2 sin^2(pi|x-x'|/p) / l^2)
+    .. math::
+        k(x, x') = \sigma^2 \exp\left(-\frac{2}{\ell^2}
+                   \sin^2\left(\frac{\pi |x - x'|}{p}\right)\right)
+
+    Non stationnaire au sens de la distance euclidienne seule : la corrélation
+    dépend de la distance *modulo* la période :math:`p`.
 
     Parameters
     ----------
     length_scale : float
-        Correlation length l
+        Longueur de corrélation :math:`\ell`.
     sigma : float
-        Signal variance
+        Écart-type du signal :math:`\sigma`.
     period : float
+        Période :math:`p`. Doit être strictement positive.
 
     Examples
     --------
-    >>> kernel = Gaussian(length_scale=0.1, sigma=1.5, period=1.0)
-    >>> K = kernel(x, x')
+    >>> kernel = Periodic(length_scale=0.1, sigma=1.5, period=1.0)
+    >>> K = kernel(x1, x2)
     """
 
+    _extra_params = frozenset({"period"})
+
     def __init__(self, length_scale: float, sigma: float, period: float) -> None:
-        super().__init__(length_scale=length_scale, sigma=sigma, period=period)
-
-    def __call__(
-        self, x1: Float[Array, " n"], x2: Float[Array, " m"]
-    ) -> Float[Array, "n m"]:
-        d = jnp.abs(jnp.subtract.outer(x1, x2))
-        arg = jnp.pi * d / self.period
-        return (self.sigma**2) * jnp.exp(
-            -2 * jnp.sin(arg) ** 2 / (self.length_scale**2)
-        )
-
-    @property
-    def length_scale(self) -> float:
-        return self._hyperparameters["length_scale"]
-
-    @property
-    def sigma(self) -> float:
-        return self._hyperparameters["sigma"]
+        if period <= 0:
+            raise ValueError(f"period must be > 0, got {period}")
+        super().__init__(length_scale, sigma, period=period)
 
     @property
     def period(self) -> float:
         return self._hyperparameters["period"]
+
+    def __call__(self, x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
+        d = self._pairwise_distance(x1, x2)
+        arg = jnp.pi * d / self.period
+        return (self.sigma**2) * jnp.exp(-2.0 * jnp.sin(arg) ** 2 / (self.length_scale**2))
