@@ -173,19 +173,23 @@ def plot_gap_vs_parameter(values, gaps, xlabel=r"$\lambda$", mc_floor=None, titl
     return fig
 
 
-#: Couleur, style de ligne, legende -- une serie par borne. Toutes les series
-#: partagent la meme position ``x`` (pas de decalage), comme le prototype NumPy :
-#: quand deux series sont proches en valeur, leurs boites se superposent --
-#: c'est l'information (les deux bornes se resserrent), pas un defaut d'affichage.
+#: Palette categorielle validee (skill dataviz, references/palette.md) -- ordre
+#: fixe, jamais recycle : slots 1-4 (bleu, vert, magenta, jaune), les seuls
+#: quatre qui passent le controle CVD toutes paires confondues. Une couleur par
+#: serie ; le trait plein partout (les 4 teintes suffisent a l'identite, pas
+#: besoin d'un pointille en plus). Toutes les series partagent la meme position
+#: ``x`` (pas de decalage) : quand deux series sont proches en valeur, leurs
+#: boites se superposent -- c'est l'information (les bornes se resserrent), pas
+#: un defaut d'affichage.
 _SERIES_STYLE = {
-    "inc_low": ("#16a085", "-", "inc_lb"),
-    "inc_up": ("#c0392b", "-", "inc_ub"),
-    "cons_low": ("#2b6cb0", "-", "cons_lb"),
-    "cons_up": ("#d68910", "--", "cons_ub"),
+    "inc_low": ("#2a78d6", "inc_lb"),
+    "inc_up": ("#008300", "inc_ub"),
+    "cons_low": ("#e87ba4", "cons_lb"),
+    "cons_up": ("#eda100", "cons_ub"),
 }
 
 
-def _boxplot_series(ax, ms, values, color, ls, label):
+def _boxplot_series(ax, ms, values, color, label):
     """Ligne (mediane sur les repetitions) + boxplot a chaque ``m`` -- une serie.
 
     ``values`` : ``(n_repeats, n_budgets)``. A ``n_repeats = 1``, la mediane
@@ -193,17 +197,17 @@ def _boxplot_series(ax, ms, values, color, ls, label):
     normal, pas une erreur.
     """
     values = np.atleast_2d(values)
-    ax.plot(ms, np.median(values, axis=0), color=color, lw=1.6, ls=ls, zorder=2)
+    ax.plot(ms, np.median(values, axis=0), color=color, lw=2.0, zorder=2, solid_capstyle="round")
     width = (ms[1] - ms[0]) * 0.3 if len(ms) > 1 else 0.6
-    line_props = dict(color=color, linewidth=1.2)
+    line_props = dict(color=color, linewidth=1.4)
     ax.boxplot(
         values, positions=ms, widths=width,
         patch_artist=True, showfliers=False, manage_ticks=False,
         medianprops=line_props, whiskerprops=line_props, capprops=line_props,
-        boxprops=dict(edgecolor=color, facecolor=color, alpha=0.25),
+        boxprops=dict(edgecolor=color, facecolor=color, alpha=0.12, linewidth=1.2),
         zorder=3,
     )
-    return Line2D([0], [0], color=color, lw=1.6, ls=ls, label=label)
+    return Line2D([0], [0], color=color, lw=2.0, label=label)
 
 
 def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, ax=None, title=""):
@@ -227,7 +231,7 @@ def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, a
         series["cons_up"] = cons_up
 
     handles = [
-        _boxplot_series(ax, ms, arr, *_SERIES_STYLE[key][:2], _SERIES_STYLE[key][2])
+        _boxplot_series(ax, ms, arr, *_SERIES_STYLE[key])
         for key, arr in series.items()
     ]
 

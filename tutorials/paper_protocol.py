@@ -10,8 +10,9 @@ prototype NumPy avec son ``N_REPEATS``.
 
 Trois figures
 -------------
-1. Reconstruction (``lambda=0``, cas standard uniquement) : prior/posterieur/
-   ``theta_vrai`` sur le champ complet, zone QoI ombree.
+1. Reconstruction (``lambda=0``) : deux figures separees -- (a) cas standard,
+   prior/posterieur/``theta_vrai`` sur le champ complet ; (b) cas GO, meme chose
+   mais restreint a la QoI, posterieur via ``GoalOrientedModel``.
 2. Spectre ``log(alpha_i)``, ``log(beta_i)``, leur somme (``lambda > 0``,
    methode gradient uniquement, standard et GO) -- Prop. 1.
 3. Boxplots des bornes (incrementale et conservative) sur les ``N_repeats``,
@@ -81,6 +82,7 @@ METHODS = ("gradient", "affine", "affine_nn")
 QOI_H = qoi_projection(N_QOI)
 B_QOI = jnp.eye(N)[:N_QOI]
 X = np.linspace(DOMAIN[0], DOMAIN[1], N + 2)[1:-1]
+X_QOI = X[:N_QOI]
 
 
 # =============================================================================
@@ -313,11 +315,12 @@ def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
 
 
 # =============================================================================
-# Figure 1 -- reconstruction, lambda=0, standard, zone QoI
+# Figure 1 -- reconstruction, lambda=0 : standard (champ complet) et GO (QoI)
 # =============================================================================
 
 
-def fig_reconstruction(once_standard_lambda0, out: Path, m_design: int = 10):
+def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int = 10):
+    """Champ complet, prior/posterieur/``theta_vrai`` -- sans zone QoI (c'est le cas standard)."""
     Sigma_Y, Sigma_Y_given_theta, methods_diag = once_standard_lambda0
     Sigma_signal, Sigma_noise = methods_diag["gradient"]
 
@@ -339,14 +342,54 @@ def fig_reconstruction(once_standard_lambda0, out: Path, m_design: int = 10):
     post = mu_post + jr.normal(k_post, (200, N)) @ np.linalg.cholesky(
         np.asarray(Gamma_post) + 1e-10 * np.eye(N)
     ).T
-    qoi_span = (float(X[0]), float(X[N_QOI - 1]))
 
     save(
         vf.plot_reconstruction(
             X, np.asarray(prior.sample(k_prior, 200)), np.asarray(post), np.asarray(theta_true),
-            sensors=np.asarray(design), qoi_span=qoi_span,
+            sensors=np.asarray(design),
         ),
-        out / "01_reconstruction_standard_lambda_0.00.png",
+        out / "01a_reconstruction_standard_lambda_0.00.png",
+    )
+
+
+def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
+    """Restreint a la QoI (premiere moitie du champ) -- posterieur via GoalOrientedModel,
+    meme construction que :func:`make_figures_go.fig_reconstruction`.
+    """
+    Sigma_Y, Sigma_Y_given_theta, methods_diag = once_go_lambda0
+    Sigma_signal, Sigma_noise = methods_diag["gradient"]
+
+    prior, model, u, likelihood, inference, go = build_case(0.0, "go")
+    dg = DiagnosticMatrices(
+        Sigma_Y=jnp.asarray(Sigma_Y), Sigma_Y_given_theta=jnp.asarray(Sigma_Y_given_theta),
+        Sigma_signal=jnp.asarray(Sigma_signal), Sigma_noise=jnp.asarray(Sigma_noise), certified=True,
+    )
+    design = greedy_schur(dg.Sigma_signal, dg.Sigma_Y_given_theta, m_design).design
+
+    k_true, k_noise, k_prior, k_post = jr.split(jr.key(42), 4)
+    theta_true = prior.sample(k_true, 1)[0]
+    y = model(theta_true, design) + jr.normal(k_noise, (len(design),)) * jnp.sqrt(
+        jnp.diag(SIGMA_OBS_MATRIX)[design]
+    )
+    mu_post_full = inference._mu(y, prior.mu, design)
+
+    Sigma_theta_prior = go.prior_covariance_qoi(prior.mu)
+    Sigma_theta_post = go.posterior_covariance_qoi(prior.mu, design)
+
+    L_prior = jnp.linalg.cholesky(Sigma_theta_prior + 1e-10 * jnp.eye(N_QOI))
+    L_post = jnp.linalg.cholesky(Sigma_theta_post + 1e-10 * jnp.eye(N_QOI))
+    prior_qoi = prior.mu[:N_QOI] + jr.normal(k_prior, (200, N_QOI)) @ L_prior.T
+    post_qoi = mu_post_full[:N_QOI] + jr.normal(k_post, (200, N_QOI)) @ L_post.T
+
+    design_np = np.asarray(design)
+    sensors_qoi = design_np[design_np < N_QOI]
+
+    save(
+        vf.plot_reconstruction(
+            X_QOI, np.asarray(prior_qoi), np.asarray(post_qoi), np.asarray(theta_true[:N_QOI]),
+            sensors=sensors_qoi if sensors_qoi.size else None,
+        ),
+        out / "01b_reconstruction_go_lambda_0.00.png",
     )
 
 
@@ -452,7 +495,9 @@ def main():
 
     print("Figures")
     if (0.0, "standard") in all_once:
-        fig_reconstruction(all_once[(0.0, "standard")], out)
+        fig_reconstruction_standard(all_once[(0.0, "standard")], out)
+    if (0.0, "go") in all_once:
+        fig_reconstruction_go(all_once[(0.0, "go")], out)
     fig_spectrum(all_once, out)
     fig_boxplots(per_method_all, args.budgets, out)
 

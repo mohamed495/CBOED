@@ -30,17 +30,17 @@ optax = ">=0.2.8,<0.3"
 default = { solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
-# surrogates et gpu sortent du solve-group "default" : leurs dependances lourdes
-# (flax/pytorch, jaxlib CUDA) ne doivent pas contraindre la resolution CPU commune.
+# surrogates sort du solve-group "default" : ses dependances lourdes
+# (flax/pytorch) ne doivent pas contraindre la resolution CPU commune.
 surrogates = { features = ["surrogates"] }
-gpu = { features = ["gpu", "test"] }
-[tool.pixi.feature.gpu]
-system-requirements = { cuda = "12" }
-[tool.pixi.feature.gpu.dependencies]
-jaxlib = { version = ">=0.10.2,<0.11", build = "*cuda12*" }
-# La feature Pixi 'surrogates' n'existait pas : l'environnement 'surrogates' la
-# referencait sans qu'elle soit definie (le [dependency-groups] en bas est du
-# PEP 735, pas une feature Pixi). On la cree ici.
+# Pas de feature/environnement "gpu" ici, volontairement : sur pixi 0.71, tout
+# environnement qui depend de jaxlib-cuda rend le fichier non solvable sur une
+# machine sans GPU des qu'on invoque N'IMPORTE QUEL environnement (pixi
+# resout/valide tous les environnements declares, pas seulement celui demande)
+# -- confirme deux fois sur ce poste de dev (GPU integre Intel, pas de CUDA) :
+# meme apres avoir retire system-requirements, `pixi run -e test` echouait en
+# essayant de resoudre "gpu". Garder la config GPU locale et non commitee sur
+# la machine qui a le GPU (voir README, section GPU).
 [tool.pixi.feature.surrogates.dependencies]
 flax = "*"
 pytorch = "*"
