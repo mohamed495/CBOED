@@ -76,6 +76,7 @@ def plot_reconstruction(
     sensors=None,
     laplace_warning=False,
     n_show=30,
+    qoi_span=None,
 ):
     """Prior, posterieur et ``theta_vrai`` superposes sur un seul graphique.
 
@@ -87,12 +88,18 @@ def plot_reconstruction(
         d'autant plus fausse que ``theta_vrai`` est loin du point de linéarisation.
     n_show : int
         Nombre de réalisations tracées par nuage (prior, posterieur).
+    qoi_span : tuple[float, float] or None
+        ``(x_min, x_max)`` de la zone d'interet goal-oriented, ombree en fond.
+        N'affecte que l'affichage : le champ trace reste le champ complet.
     """
     prior_samples = np.asarray(prior_samples)
     posterior_samples = np.asarray(posterior_samples)
     x = np.asarray(x)
 
     fig, ax = plt.subplots(figsize=(8, 4.2))
+    if qoi_span is not None:
+        ax.axvspan(qoi_span[0], qoi_span[1], color=COLORS["sensors"], alpha=0.08, zorder=0)
+
     for s in prior_samples[:n_show]:
         ax.plot(x, s, color=COLORS["prior"], alpha=0.25, lw=0.7)
     for s in posterior_samples[:n_show]:
@@ -104,6 +111,12 @@ def plot_reconstruction(
         Line2D([0], [0], color=COLORS["posterior"], lw=1.5, label="posterieur (realisations)"),
         Line2D([0], [0], color=COLORS["truth"], lw=2.0, label=r"$\theta_{\rm vrai}$"),
     ]
+    if qoi_span is not None:
+        from matplotlib.patches import Patch
+
+        handles.append(
+            Patch(facecolor=COLORS["sensors"], alpha=0.15, label="zone QoI (goal-oriented)")
+        )
     if sensors is not None:
         for j in np.asarray(sensors):
             ax.axvline(x[j], color=COLORS["sensors"], lw=0.8, alpha=0.5)

@@ -192,3 +192,41 @@ def plot_log_generalized_spectrum(alpha, beta, title=""):
         ax.set_title(title, fontsize=10)
     fig.tight_layout()
     return fig
+
+
+def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
+    r"""``log(alpha_i)``, ``log(beta_i)`` et leur somme -- une courbe par ``lambda``.
+
+    Trois panneaux : la non-linearite (``lambda`` croissant) deplace le spectre
+    vers le haut (Prop. 1, le gap croit) -- se lit directement ici.
+
+    Parameters
+    ----------
+    alpha_by_lambda, beta_by_lambda : dict[float, array]
+        ``{lambda: alpha_i}`` -- memes cles dans les deux dicts.
+    """
+    lams = sorted(alpha_by_lambda)
+    cmap = plt.get_cmap("viridis")
+    colors = {lam: cmap(i / max(len(lams) - 1, 1)) for i, lam in enumerate(lams)}
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
+    for lam in lams:
+        alpha = np.asarray(alpha_by_lambda[lam])
+        beta = np.asarray(beta_by_lambda[lam])
+        idx = np.arange(1, len(alpha) + 1)
+        label = rf"$\lambda={lam}$"
+        axes[0].plot(idx, np.log(alpha), lw=1.5, color=colors[lam], label=label)
+        axes[1].plot(idx, np.log(beta), lw=1.5, color=colors[lam], label=label)
+        axes[2].plot(idx, np.log(alpha) + np.log(beta), lw=1.5, color=colors[lam], label=label)
+
+    axes[0].set_ylabel(r"$\log(\alpha_i)$")
+    axes[1].set_ylabel(r"$\log(\beta_i)$")
+    axes[2].set_ylabel(r"$\log(\alpha_i) + \log(\beta_i)$")
+    for ax in axes:
+        ax.set_xlabel("indice du mode")
+        ax.axhline(0, color="0.6", lw=0.8, ls=":")
+        ax.legend(fontsize=7)
+    if title:
+        fig.suptitle(title, fontsize=11)
+    fig.tight_layout()
+    return fig

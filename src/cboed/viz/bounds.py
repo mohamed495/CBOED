@@ -170,3 +170,77 @@ def plot_gap_vs_parameter(values, gaps, xlabel=r"$\lambda$", mc_floor=None, titl
         ax.set_title(title, fontsize=10)
     fig.tight_layout()
     return fig
+
+
+def plot_bounds_boxplot_by_method(ms, results_per_method, strategy_label="", title=""):
+    """Bornes (inf/sup) sur ``N_repeats``, boxplot par methode, groupe par budget.
+
+    A ``N_repeats = 1``, chaque boite degenere en un trait (pas d'ecart-type) --
+    normal, pas une erreur : la variabilite n'apparait qu'a ``N_repeats > 1``.
+
+    Parameters
+    ----------
+    results_per_method : dict[str, dict]
+        ``{"gradient": {"low": (n_repeats, n_budgets), "up": (...)}, ...}``.
+        Une methode absente (echec numerique, cf. ``try_assemble``) est
+        simplement absente du dict -- pas de trou trace, pas de crash.
+    """
+    from matplotlib.patches import Patch
+
+    methods = list(results_per_method)
+    n_methods = max(len(methods), 1)
+    ms = np.asarray(ms)
+    group_width = 0.8
+    slot = group_width / n_methods
+    palette = [COLORS["incremental"], COLORS["Sigma_signal"], COLORS["conservative"]]
+
+    fig, ax = plt.subplots(figsize=(8.5, 4.5))
+    handles = []
+    for k, method in enumerate(methods):
+        low = np.atleast_2d(np.asarray(results_per_method[method]["low"]))
+        up = np.atleast_2d(np.asarray(results_per_method[method]["up"]))
+        offset = (k - (n_methods - 1) / 2) * slot
+        c = palette[k % len(palette)]
+
+        line_props = dict(color=c, linewidth=1.4)
+        bp_low = ax.boxplot(
+            low,
+            positions=ms + offset - slot * 0.18,
+            widths=slot * 0.32,
+            patch_artist=True,
+            showfliers=False,
+            manage_ticks=False,
+            medianprops=line_props,
+            whiskerprops=line_props,
+            capprops=line_props,
+            boxprops=dict(edgecolor=c),
+        )
+        bp_up = ax.boxplot(
+            up,
+            positions=ms + offset + slot * 0.18,
+            widths=slot * 0.32,
+            patch_artist=True,
+            showfliers=False,
+            manage_ticks=False,
+            medianprops=line_props,
+            whiskerprops=line_props,
+            capprops=line_props,
+            boxprops=dict(edgecolor=c),
+        )
+        for box in bp_low["boxes"]:
+            box.set_facecolor(c)
+            box.set_alpha(0.35)
+        for box in bp_up["boxes"]:
+            box.set_facecolor(c)
+            box.set_alpha(0.75)
+        handles.append(Patch(facecolor=c, edgecolor=c, alpha=0.6, label=method))
+
+    ax.set_xticks(ms)
+    ax.set_xticklabels(ms)
+    ax.set_xlabel("nombre de capteurs $m$")
+    ax.set_ylabel(f"borne {strategy_label} (nats)" if strategy_label else "borne (nats)")
+    ax.legend(handles=handles, fontsize=8)
+    if title:
+        ax.set_title(title, fontsize=10)
+    fig.tight_layout()
+    return fig
