@@ -177,24 +177,38 @@ def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_in
     )
 
 
-def bounds_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_noise, eig_full_mc, certified, budgets):
+STRATEGY_LABELS = ("iEIG design", "cEIG design")
+
+
+def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_noise, eig_full_mc, certified, budgets):
+    """Deux designs (iEIG, cEIG), quatre bornes chacun -- protocole du papier §2.
+
+    Meme structure que ``make_figures.py::fig_bounds`` : le design choisi en
+    optimisant (Sigma_signal, Sigma_Y_given_theta) sert de reference pour le
+    panneau "iEIG design", celui optimisant (Sigma_Y, Sigma_noise) pour
+    "cEIG design" -- chacun affiche ses quatre bornes (inc + cons).
+    """
     dg = DiagnosticMatrices(
         Sigma_Y=Sigma_Y, Sigma_Y_given_theta=Sigma_Y_given_theta,
         Sigma_signal=Sigma_signal, Sigma_noise=Sigma_noise, certified=certified,
     )
     m_max = max(budgets)
-    design_inc = greedy_schur(Sigma_signal, Sigma_Y_given_theta, m_max).design
-    design_cons = greedy_schur(Sigma_Y, Sigma_noise, m_max).design
-
-    rows = {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")}
-    for m in budgets:
-        inc = incremental_bounds(dg, design_inc[:m])
-        cons = conservative_bounds(dg, design_cons[:m], eig_full=jnp.asarray(eig_full_mc))
-        rows["inc_low"].append(float(inc.lower))
-        rows["inc_up"].append(float(inc.upper))
-        rows["cons_low"].append(float(cons.lower))
-        rows["cons_up"].append(float(cons.upper))
-    return {k: np.array(v) for k, v in rows.items()}
+    designs = {
+        "iEIG design": greedy_schur(Sigma_signal, Sigma_Y_given_theta, m_max).design,
+        "cEIG design": greedy_schur(Sigma_Y, Sigma_noise, m_max).design,
+    }
+    out = {}
+    for label, W in designs.items():
+        rows = {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")}
+        for m in budgets:
+            inc = incremental_bounds(dg, W[:m])
+            cons = conservative_bounds(dg, W[:m], eig_full=jnp.asarray(eig_full_mc))
+            rows["inc_low"].append(float(inc.lower))
+            rows["inc_up"].append(float(inc.upper))
+            rows["cons_low"].append(float(cons.lower))
+            rows["cons_up"].append(float(cons.upper))
+        out[label] = {k: np.array(v) for k, v in rows.items()}
+    return out
 
 
 # =============================================================================
@@ -205,7 +219,10 @@ def bounds_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_noise, e
 def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_steps,
                          nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed):
     """Boucle de repetition -- diagnostics 'une fois' (repeat 0) + bornes par repetition."""
-    per_method = {m: {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")} for m in METHODS}
+    per_method = {
+        m: {label: {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")} for label in STRATEGY_LABELS}
+        for m in METHODS
+    }
     once = None  # (Sigma_Y, Sigma_Y_given_theta, methods_diag) du repeat 0 -- pour fig 1/2
 
     for r in range(n_repeats):
@@ -226,15 +243,18 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
             if diag is None:
                 continue
             Sigma_signal, Sigma_noise = diag
-            res = bounds_for_method(
+            res = strategies_for_method(
                 Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_noise,
                 eig_full_mc, certified=(method == "gradient"), budgets=budgets,
             )
-            for k, v in res.items():
-                per_method[method][k].append(v)
+            for label, d in res.items():
+                for k, v in d.items():
+                    per_method[method][label][k].append(v)
 
     per_method = {
-        m: {k: np.stack(v) for k, v in d.items()} for m, d in per_method.items() if d["inc_low"]
+        m: {label: {k: np.stack(v) for k, v in d.items()} for label, d in strat.items()}
+        for m, strat in per_method.items()
+        if strat[STRATEGY_LABELS[0]]["inc_low"]
     }
     return once, per_method
 
@@ -341,25 +361,18 @@ def fig_spectrum(all_once, out: Path):
 
 
 def fig_boxplots(per_method_all, budgets, out: Path):
+    """Une figure par (lambda, cas, methode) -- meme mise en page que ``07_bounds_lambda``
+    (2 panneaux, design iEIG / design cEIG), boxplot a chaque budget au lieu
+    d'une bande continue.
+    """
     for (lambda_, case), per_method in per_method_all.items():
-        if not per_method:
-            continue
-        inc_series = {m: {"low": d["inc_low"], "up": d["inc_up"]} for m, d in per_method.items()}
-        cons_series = {m: {"low": d["cons_low"], "up": d["cons_up"]} for m, d in per_method.items()}
-        save(
-            vb.plot_bounds_boxplot_by_method(
-                budgets, inc_series, strategy_label="incrementale",
-                title=rf"{case}, $\lambda={lambda_}$ -- incrementale",
-            ),
-            out / f"03_boxplot_incremental_{case}_lambda_{lambda_:.2f}.png",
-        )
-        save(
-            vb.plot_bounds_boxplot_by_method(
-                budgets, cons_series, strategy_label="conservative",
-                title=rf"{case}, $\lambda={lambda_}$ -- conservative",
-            ),
-            out / f"03_boxplot_conservative_{case}_lambda_{lambda_:.2f}.png",
-        )
+        for method, per_strategy in per_method.items():
+            save(
+                vb.plot_two_strategies_boxplot(
+                    budgets, per_strategy, title=rf"{method}, {case}, $\lambda={lambda_}$"
+                ),
+                out / f"03_boxplot_{method}_{case}_lambda_{lambda_:.2f}.png",
+            )
 
 
 # =============================================================================
