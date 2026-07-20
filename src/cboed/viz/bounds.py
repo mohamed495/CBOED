@@ -15,6 +15,7 @@ Les légendes encodent donc les deux axes -- jamais ``lb``/``ub`` seuls.
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
 
 from cboed.viz.style import COLORS
 
@@ -172,75 +173,87 @@ def plot_gap_vs_parameter(values, gaps, xlabel=r"$\lambda$", mc_floor=None, titl
     return fig
 
 
-def plot_bounds_boxplot_by_method(ms, results_per_method, strategy_label="", title=""):
-    """Bornes (inf/sup) sur ``N_repeats``, boxplot par methode, groupe par budget.
+def _boxplot_pair(ax, ms, low, up, color, offset, label):
+    """Boxplots bas/haut d'une borne, a chaque ``m`` -- meme couleur, deux nuances.
 
-    A ``N_repeats = 1``, chaque boite degenere en un trait (pas d'ecart-type) --
-    normal, pas une erreur : la variabilite n'apparait qu'a ``N_repeats > 1``.
+    ``low``/``up`` : ``(n_repeats, n_budgets)``. A ``n_repeats = 1``, chaque boite
+    degenere en un trait (pas d'erreur -- la variabilite n'apparait qu'a
+    ``n_repeats > 1``).
+    """
+    line_props = dict(color=color, linewidth=1.4)
+    box_kwargs = dict(
+        patch_artist=True, showfliers=False, manage_ticks=False,
+        medianprops=line_props, whiskerprops=line_props, capprops=line_props,
+        boxprops=dict(edgecolor=color),
+    )
+    bp_low = ax.boxplot(low, positions=ms + offset - 0.12, widths=0.22, **box_kwargs)
+    bp_up = ax.boxplot(up, positions=ms + offset + 0.12, widths=0.22, **box_kwargs)
+    for box in bp_low["boxes"]:
+        box.set_facecolor(color)
+        box.set_alpha(0.30)
+    for box in bp_up["boxes"]:
+        box.set_facecolor(color)
+        box.set_alpha(0.70)
+    return Patch(facecolor=color, edgecolor=color, alpha=0.55, label=label)
+
+
+def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, ax=None, title=""):
+    """Comme :func:`plot_bounds_vs_m`, mais un boxplot (sur les repetitions) a
+    chaque ``m`` plutot qu'une bande continue.
 
     Parameters
     ----------
-    results_per_method : dict[str, dict]
-        ``{"gradient": {"low": (n_repeats, n_budgets), "up": (...)}, ...}``.
-        Une methode absente (echec numerique, cf. ``try_assemble``) est
-        simplement absente du dict -- pas de trou trace, pas de crash.
+    inc_low, inc_up : array ``(n_repeats, n_budgets)``
+        Encadrement incremental (Cor. 1), une valeur par repetition et par budget.
+    cons_low, cons_up : array ``(n_repeats, n_budgets)`` or None
+        Encadrement conservatif (Cor. 2), meme forme.
     """
-    from matplotlib.patches import Patch
-
-    methods = list(results_per_method)
-    n_methods = max(len(methods), 1)
+    ax = ax or plt.subplots(figsize=(7, 4.2))[1]
     ms = np.asarray(ms)
-    group_width = 0.8
-    slot = group_width / n_methods
-    palette = [COLORS["incremental"], COLORS["Sigma_signal"], COLORS["conservative"]]
-
-    fig, ax = plt.subplots(figsize=(8.5, 4.5))
-    handles = []
-    for k, method in enumerate(methods):
-        low = np.atleast_2d(np.asarray(results_per_method[method]["low"]))
-        up = np.atleast_2d(np.asarray(results_per_method[method]["up"]))
-        offset = (k - (n_methods - 1) / 2) * slot
-        c = palette[k % len(palette)]
-
-        line_props = dict(color=c, linewidth=1.4)
-        bp_low = ax.boxplot(
-            low,
-            positions=ms + offset - slot * 0.18,
-            widths=slot * 0.32,
-            patch_artist=True,
-            showfliers=False,
-            manage_ticks=False,
-            medianprops=line_props,
-            whiskerprops=line_props,
-            capprops=line_props,
-            boxprops=dict(edgecolor=c),
+    handles = [
+        _boxplot_pair(
+            ax, ms, np.atleast_2d(inc_low), np.atleast_2d(inc_up),
+            COLORS["incremental"], offset=-0.15 if cons_low is not None else 0.0,
+            label="incremental (Cor. 1)",
         )
-        bp_up = ax.boxplot(
-            up,
-            positions=ms + offset + slot * 0.18,
-            widths=slot * 0.32,
-            patch_artist=True,
-            showfliers=False,
-            manage_ticks=False,
-            medianprops=line_props,
-            whiskerprops=line_props,
-            capprops=line_props,
-            boxprops=dict(edgecolor=c),
+    ]
+    if cons_low is not None:
+        handles.append(
+            _boxplot_pair(
+                ax, ms, np.atleast_2d(cons_low), np.atleast_2d(cons_up),
+                COLORS["conservative"], offset=0.15, label="conservatif (Cor. 2)",
+            )
         )
-        for box in bp_low["boxes"]:
-            box.set_facecolor(c)
-            box.set_alpha(0.35)
-        for box in bp_up["boxes"]:
-            box.set_facecolor(c)
-            box.set_alpha(0.75)
-        handles.append(Patch(facecolor=c, edgecolor=c, alpha=0.6, label=method))
 
     ax.set_xticks(ms)
     ax.set_xticklabels(ms)
     ax.set_xlabel("nombre de capteurs $m$")
-    ax.set_ylabel(f"borne {strategy_label} (nats)" if strategy_label else "borne (nats)")
+    ax.set_ylabel("gain d'information (nats)")
     ax.legend(handles=handles, fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
+    return ax.figure
+
+
+def plot_two_strategies_boxplot(ms, per_strategy, title=""):
+    """Version boxplot de :func:`plot_two_strategies` -- meme mise en page.
+
+    Parameters
+    ----------
+    per_strategy : dict[str, dict]
+        ``{"iEIG>= (19)": {"inc_low": (n_repeats, n_budgets), ...}}`` -- memes
+        cles que :func:`plot_two_strategies`, mais des arrays de repetitions.
+    """
+    fig, axes = plt.subplots(
+        1, len(per_strategy), figsize=(6.5 * len(per_strategy), 4.2), sharey=True, squeeze=False
+    )
+    for ax, (label, b) in zip(axes[0], per_strategy.items(), strict=True):
+        plot_bounds_boxplot_vs_m(
+            ms, b["inc_low"], b["inc_up"], b.get("cons_low"), b.get("cons_up"), ax=ax, title=label
+        )
+    for ax in axes[0][1:]:
+        ax.set_ylabel("")
+    if title:
+        fig.suptitle(title, fontsize=11)
     fig.tight_layout()
     return fig
