@@ -35,3 +35,4 @@ CBOED_recap_session.md
 *.png
 .cache
 PyBOED_Architecture_2.md
+*.npz
