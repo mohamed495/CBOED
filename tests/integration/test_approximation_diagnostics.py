@@ -11,14 +11,13 @@ import jax.numpy as jnp
 import jax.random as jr
 import pytest
 
+from cboed.bounds.diagnostics.gradient_based import gradient_diagnostics_standard
 from cboed.bounds.diagnostics.linear_approximation_based import (
     affine_denoiser,
     approximation_noise,
     approximation_signal,
     denoiser_residual,
 )
-from cboed.bounds.diagnostics.gradient_based import gradient_diagnostics_standard
-from cboed.bounds.diagnostics.sample_based import sample_Sigma_Y
 from cboed.priors.gaussian_process import GaussianPrior, GaussianProcess
 from cboed.priors.kernel import Matern32
 
@@ -83,7 +82,11 @@ def test_signal_matches_gradient_at_lambda_zero(prior, linear_model):
     key = jr.key(2)
 
     Sigma_signal_grad, _ = gradient_diagnostics_standard(
-        u, prior, Sigma_obs, key, 64  # gradient exact des 1 echantillon (Jac constante)
+        u,
+        prior,
+        Sigma_obs,
+        key,
+        64,  # gradient exact des 1 echantillon (Jac constante)
     )
     u_vals, Y, _ = _paired(u, prior, Sigma_obs, key, N_SAMPLES)
     Sigma_signal_approx = approximation_signal(u_vals, Y, Sigma_obs)
@@ -111,7 +114,8 @@ def test_signal_matches_sample_Sigma_Y_at_lambda_zero(prior, linear_model):
 
 
 def test_noise_preceq_signal(prior, linear_model):
-    """`g` voit theta en plus de Y, donc debruite mieux : `R_g <= R_f`, `Sigma_noise <= Sigma_signal`."""
+    """`g` voit theta en plus de Y, donc debruite mieux :
+    `R_g <= R_f`, `Sigma_noise <= Sigma_signal`"""
     u, _ = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)
     u_vals, Y, eta = _paired(u, prior, Sigma_obs, jr.key(5), N_SAMPLES)

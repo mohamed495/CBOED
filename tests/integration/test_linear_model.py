@@ -118,6 +118,7 @@ def test_cov_computed_from_model(setup):
     assert jnp.allclose(computed, expected, atol=1e-8)
     assert jnp.allclose(precision, setup.inference.posterior_precision(theta))
 
+
 def test_mu(setup: Setup) -> None:
     """Posterior mean agrees with the closed-form Gaussian formula."""
 
@@ -137,13 +138,10 @@ def test_mu(setup: Setup) -> None:
     # formule analytique
     H = setup.inference.posterior_precision(theta_lin)
 
-    grad_post = (
-        setup.likelihood.grad_log_likelihood(
-            y=y,
-            theta=theta_lin,
-        )
-        + setup.inference.prior.grad_log_prior(theta_lin)
-    )
+    grad_post = setup.likelihood.grad_log_likelihood(
+        y=y,
+        theta=theta_lin,
+    ) + setup.inference.prior.grad_log_prior(theta_lin)
 
     mu_expected = theta_lin + jnp.linalg.solve(H, grad_post)
 

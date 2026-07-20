@@ -32,8 +32,7 @@ class Denoiser(Protocol):
     ou ``(Y, theta)`` concaténés (pour ``g``).
     """
 
-    def __call__(self, features: Float[Array, " n_feat"]) -> Float[Array, " n_obs"]:
-        ...
+    def __call__(self, features: Float[Array, " n_feat"]) -> Float[Array, " n_obs"]: ...
 
 
 # =============================================================================
@@ -84,13 +83,16 @@ class _MLP(eqx.Module):
     def __init__(self, n_in, n_out, width, depth, key):
         keys = jax.random.split(key, depth)
         sizes = [n_in] + [width] * (depth - 1) + [n_out]
-        self.layers = [eqx.nn.Linear(a, b, key=k)
-                       for a, b, k in zip(sizes[:-1], sizes[1:], keys, strict=True)]
+        self.layers = [
+            eqx.nn.Linear(a, b, key=k) for a, b, k in zip(sizes[:-1], sizes[1:], keys, strict=True)
+        ]
         # derniere couche a zero : NN(Y) = 0 au depart, l'affine domine
         last = self.layers[-1]
-        self.layers[-1] = eqx.tree_at(lambda m: (m.weight, m.bias), last,
-                                      (jnp.zeros_like(last.weight),
-                                       jnp.zeros_like(last.bias)))
+        self.layers[-1] = eqx.tree_at(
+            lambda m: (m.weight, m.bias),
+            last,
+            (jnp.zeros_like(last.weight), jnp.zeros_like(last.bias)),
+        )
 
     def __call__(self, x):
         for layer in self.layers[:-1]:
@@ -133,7 +135,7 @@ class ResidualDenoiser(eqx.Module):
         n_feat, n_obs = features.shape[1], u_samples.shape[1]
         width = width or 2 * n_obs
         affine = AffineDenoiser.fit(u_samples, features)
-        target = u_samples - jax.vmap(affine)(features)   # le residu a apprendre
+        target = u_samples - jax.vmap(affine)(features)  # le residu a apprendre
 
         net = _MLP(n_feat, n_obs, width, depth, key)
         opt = optax.adam(lr)
@@ -144,6 +146,7 @@ class ResidualDenoiser(eqx.Module):
             def loss(net):
                 pred = jax.vmap(net)(features)
                 return jnp.mean(jnp.sum((pred - target) ** 2, axis=1))
+
             val, grads = eqx.filter_value_and_grad(loss)(net)
             updates, state = opt.update(grads, state)
             return eqx.apply_updates(net, updates), state, val

@@ -152,6 +152,7 @@ def plot_gap_decomposition(alpha, beta, title=""):
     fig.tight_layout()
     return fig
 
+
 def plot_log_generalized_spectrum(alpha, beta, title=""):
     """``log(alpha_i)`` et ``log(beta_i)`` superposes, echelle lineaire.
 

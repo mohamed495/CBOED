@@ -145,6 +145,7 @@ def plot_contraction(x, prior_std, posterior_std, sensors=None):
     fig.tight_layout()
     return fig
 
+
 def plot_contraction_spectrum(
     Gamma_prior,
     Gamma_post,
@@ -168,36 +169,24 @@ def plot_contraction_spectrum(
     Gamma_prior = np.asarray(Gamma_prior)
     Gamma_post = np.asarray(Gamma_post)
 
-    eigvals, eigvecs = np.linalg.eigh(
-        Gamma_prior
-    )
+    eigvals, eigvecs = np.linalg.eigh(Gamma_prior)
 
     eigvals = np.maximum(
         eigvals,
         np.finfo(float).eps,
     )
 
-    Gamma_prior_inv_sqrt = (
-        eigvecs
-        @ np.diag(1.0 / np.sqrt(eigvals))
-        @ eigvecs.T
-    )
+    Gamma_prior_inv_sqrt = eigvecs @ np.diag(1.0 / np.sqrt(eigvals)) @ eigvecs.T
 
-    C = (
-        Gamma_prior_inv_sqrt
-        @ Gamma_post
-        @ Gamma_prior_inv_sqrt
-    )
+    C = Gamma_prior_inv_sqrt @ Gamma_post @ Gamma_prior_inv_sqrt
 
     contraction = np.linalg.eigvalsh(C)
     contraction = np.sort(contraction)[::-1]
 
-    fig, ax = plt.subplots(
-        figsize=(6, 3.2)
-    )
+    fig, ax = plt.subplots(figsize=(6, 3.2))
 
     ax.semilogy(
-        np.arange(1, len(contraction)+1),
+        np.arange(1, len(contraction) + 1),
         contraction,
         "o-",
         ms=3,
