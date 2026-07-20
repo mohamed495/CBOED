@@ -187,6 +187,16 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
     optimisant (Sigma_signal, Sigma_Y_given_theta) sert de reference pour le
     panneau "iEIG design", celui optimisant (Sigma_Y, Sigma_noise) pour
     "cEIG design" -- chacun affiche ses quatre bornes (inc + cons).
+
+    Parameters
+    ----------
+    eig_full_mc : float or None
+        ``eig_full`` pour la borne conservative (Cor. 2). ``None`` (defaut,
+        comme ``make_figures.py``) -> encadre par Cor. 1 au design complet,
+        certifie. Une valeur -> l'estimation MC fournie -- decertifie la
+        borne, et a lambda=0 le biais du NMC (voir conservative_certified_vs_mc.py)
+        peut deconnecter completement le conservatif de l'incremental, qui
+        eux doivent coincider exactement (Rem. 2.2, gap nul en lineaire).
     """
     dg = DiagnosticMatrices(
         Sigma_Y=Sigma_Y, Sigma_Y_given_theta=Sigma_Y_given_theta,
@@ -197,12 +207,13 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
         "iEIG design": greedy_schur(Sigma_signal, Sigma_Y_given_theta, m_max).design,
         "cEIG design": greedy_schur(Sigma_Y, Sigma_noise, m_max).design,
     }
+    eig_full_arg = None if eig_full_mc is None else jnp.asarray(eig_full_mc)
     out = {}
     for label, W in designs.items():
         rows = {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")}
         for m in budgets:
             inc = incremental_bounds(dg, W[:m])
-            cons = conservative_bounds(dg, W[:m], eig_full=jnp.asarray(eig_full_mc))
+            cons = conservative_bounds(dg, W[:m], eig_full=eig_full_arg)
             rows["inc_low"].append(float(inc.lower))
             rows["inc_up"].append(float(inc.upper))
             rows["cons_low"].append(float(cons.lower))
@@ -217,8 +228,19 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
 
 
 def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_steps,
-                         nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed):
-    """Boucle de repetition -- diagnostics 'une fois' (repeat 0) + bornes par repetition."""
+                         nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed,
+                         eig_full_mode="certified"):
+    """Boucle de repetition -- diagnostics 'une fois' (repeat 0) + bornes par repetition.
+
+    Parameters
+    ----------
+    eig_full_mode : {"certified", "mc"}
+        ``"certified"`` (defaut, comme ``make_figures.py``) : borne conservative
+        encadree par Cor. 1 au design complet, jamais estimee. ``"mc"`` : estime
+        ``eig_full`` par NMC -- decertifie la borne, coute un NMC en plus par
+        repetition, et biaise fortement le resultat a petite echelle (voir
+        ``conservative_certified_vs_mc.py``).
+    """
     per_method = {
         m: {label: {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")} for label in STRATEGY_LABELS}
         for m in METHODS
@@ -232,9 +254,11 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
         Sigma_Y, Sigma_Y_given_theta, methods_diag = compute_repeat(
             lambda_, case, k_diag, n_samples, n_gradient, net_steps
         )
-        eig_full_mc = estimate_eig_full(
-            lambda_, case, k_eig, nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal
-        )
+        eig_full_mc = None
+        if eig_full_mode == "mc":
+            eig_full_mc = estimate_eig_full(
+                lambda_, case, k_eig, nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal
+            )
         if r == 0:
             once = (Sigma_Y, Sigma_Y_given_theta, methods_diag)
 
@@ -262,12 +286,12 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
 CACHE_SCHEMA_VERSION = 2  # bump si la structure de per_method change -- invalide les caches perimes
 
 
-def cache_path(cache_dir, lambda_, case):
-    return cache_dir / f"protocol_v{CACHE_SCHEMA_VERSION}_lambda_{lambda_:.2f}_{case}.npz"
+def cache_path(cache_dir, lambda_, case, eig_full_mode):
+    return cache_dir / f"protocol_v{CACHE_SCHEMA_VERSION}_{eig_full_mode}_lambda_{lambda_:.2f}_{case}.npz"
 
 
 def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
-    path = cache_path(cache_dir, lambda_, case)
+    path = cache_path(cache_dir, lambda_, case, kwargs.get("eig_full_mode", "certified"))
     if path.exists() and not force:
         print(f"  cache  {path.name}")
         data = dict(np.load(path, allow_pickle=True))
@@ -397,6 +421,11 @@ def main():
     p.add_argument("--nmc-n-inner-marginal", type=int, default=30000)
     p.add_argument("--budgets", type=int, nargs="+", default=list(SENSOR_BUDGETS))
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--eig-full-mode", choices=("certified", "mc"), default="certified",
+        help="Borne conservative : 'certified' (defaut, comme make_figures.py, Cor. 1 au design"
+             " complet) ou 'mc' (NMC -- decertifie, biaise fortement a petite echelle).",
+    )
     p.add_argument("--out", default="figures_protocol")
     p.add_argument("--cache", default=".cache_protocol")
     p.add_argument("--force", action="store_true")
@@ -416,7 +445,7 @@ def main():
                 n_repeats=args.n_repeats, n_samples=args.n_samples, n_gradient=args.n_gradient,
                 net_steps=args.net_steps, nmc_n_outer=args.nmc_n_outer, nmc_n_inner=args.nmc_n_inner,
                 nmc_n_inner_theta=args.nmc_n_inner_theta, nmc_n_inner_marginal=args.nmc_n_inner_marginal,
-                budgets=args.budgets, base_seed=args.seed,
+                budgets=args.budgets, base_seed=args.seed, eig_full_mode=args.eig_full_mode,
             )
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method
