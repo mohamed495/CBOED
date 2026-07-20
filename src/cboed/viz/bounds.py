@@ -15,7 +15,7 @@ Les légendes encodent donc les deux axes -- jamais ``lb``/``ub`` seuls.
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
 from cboed.viz.style import COLORS
 
@@ -173,33 +173,43 @@ def plot_gap_vs_parameter(values, gaps, xlabel=r"$\lambda$", mc_floor=None, titl
     return fig
 
 
-def _boxplot_pair(ax, ms, low, up, color, offset, label):
-    """Boxplots bas/haut d'une borne, a chaque ``m`` -- meme couleur, deux nuances.
+#: Couleur, style de ligne, legende -- une serie par borne. Toutes les series
+#: partagent la meme position ``x`` (pas de decalage), comme le prototype NumPy :
+#: quand deux series sont proches en valeur, leurs boites se superposent --
+#: c'est l'information (les deux bornes se resserrent), pas un defaut d'affichage.
+_SERIES_STYLE = {
+    "inc_low": ("#16a085", "-", "inc_lb"),
+    "inc_up": ("#c0392b", "-", "inc_ub"),
+    "cons_low": ("#2b6cb0", "-", "cons_lb"),
+    "cons_up": ("#d68910", "--", "cons_ub"),
+}
 
-    ``low``/``up`` : ``(n_repeats, n_budgets)``. A ``n_repeats = 1``, chaque boite
-    degenere en un trait (pas d'erreur -- la variabilite n'apparait qu'a
-    ``n_repeats > 1``).
+
+def _boxplot_series(ax, ms, values, color, ls, label):
+    """Ligne (mediane sur les repetitions) + boxplot a chaque ``m`` -- une serie.
+
+    ``values`` : ``(n_repeats, n_budgets)``. A ``n_repeats = 1``, la mediane
+    passe exactement par les points et chaque boite degenere en un trait --
+    normal, pas une erreur.
     """
-    line_props = dict(color=color, linewidth=1.4)
-    box_kwargs = dict(
+    values = np.atleast_2d(values)
+    ax.plot(ms, np.median(values, axis=0), color=color, lw=1.6, ls=ls, zorder=2)
+    width = (ms[1] - ms[0]) * 0.3 if len(ms) > 1 else 0.6
+    line_props = dict(color=color, linewidth=1.2)
+    ax.boxplot(
+        values, positions=ms, widths=width,
         patch_artist=True, showfliers=False, manage_ticks=False,
         medianprops=line_props, whiskerprops=line_props, capprops=line_props,
-        boxprops=dict(edgecolor=color),
+        boxprops=dict(edgecolor=color, facecolor=color, alpha=0.25),
+        zorder=3,
     )
-    bp_low = ax.boxplot(low, positions=ms + offset - 0.12, widths=0.22, **box_kwargs)
-    bp_up = ax.boxplot(up, positions=ms + offset + 0.12, widths=0.22, **box_kwargs)
-    for box in bp_low["boxes"]:
-        box.set_facecolor(color)
-        box.set_alpha(0.30)
-    for box in bp_up["boxes"]:
-        box.set_facecolor(color)
-        box.set_alpha(0.70)
-    return Patch(facecolor=color, edgecolor=color, alpha=0.55, label=label)
+    return Line2D([0], [0], color=color, lw=1.6, ls=ls, label=label)
 
 
 def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, ax=None, title=""):
     """Comme :func:`plot_bounds_vs_m`, mais un boxplot (sur les repetitions) a
-    chaque ``m`` plutot qu'une bande continue.
+    chaque ``m`` plutot qu'une bande continue -- 4 series superposees, une
+    couleur chacune (cf. ``_SERIES_STYLE``), comme le prototype NumPy.
 
     Parameters
     ----------
@@ -208,22 +218,18 @@ def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, a
     cons_low, cons_up : array ``(n_repeats, n_budgets)`` or None
         Encadrement conservatif (Cor. 2), meme forme.
     """
-    ax = ax or plt.subplots(figsize=(7, 4.2))[1]
+    ax = ax or plt.subplots(figsize=(6.5, 4.5))[1]
     ms = np.asarray(ms)
-    handles = [
-        _boxplot_pair(
-            ax, ms, np.atleast_2d(inc_low), np.atleast_2d(inc_up),
-            COLORS["incremental"], offset=-0.15 if cons_low is not None else 0.0,
-            label="incremental (Cor. 1)",
-        )
-    ]
+
+    series = {"inc_low": inc_low, "inc_up": inc_up}
     if cons_low is not None:
-        handles.append(
-            _boxplot_pair(
-                ax, ms, np.atleast_2d(cons_low), np.atleast_2d(cons_up),
-                COLORS["conservative"], offset=0.15, label="conservatif (Cor. 2)",
-            )
-        )
+        series["cons_low"] = cons_low
+        series["cons_up"] = cons_up
+
+    handles = [
+        _boxplot_series(ax, ms, arr, *_SERIES_STYLE[key][:2], _SERIES_STYLE[key][2])
+        for key, arr in series.items()
+    ]
 
     ax.set_xticks(ms)
     ax.set_xticklabels(ms)

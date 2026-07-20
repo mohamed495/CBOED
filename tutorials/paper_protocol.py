@@ -259,8 +259,11 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
     return once, per_method
 
 
+CACHE_SCHEMA_VERSION = 2  # bump si la structure de per_method change -- invalide les caches perimes
+
+
 def cache_path(cache_dir, lambda_, case):
-    return cache_dir / f"protocol_lambda_{lambda_:.2f}_{case}.npz"
+    return cache_dir / f"protocol_v{CACHE_SCHEMA_VERSION}_lambda_{lambda_:.2f}_{case}.npz"
 
 
 def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
