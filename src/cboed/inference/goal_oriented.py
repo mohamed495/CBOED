@@ -1,5 +1,7 @@
 """Inférence goal-oriented : propagation de la postérieure vers une QoI."""
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
@@ -55,6 +57,7 @@ class GoalOrientedModel(InferenceModel):
         return jax.jacobian(self.h)(eta)
 
     @staticmethod
+    @jax.jit
     def _log_det_precision_from_cov(
         cov: Float[Array, "n_qoi n_qoi"],
     ) -> Float[Array, ""]:
@@ -68,6 +71,7 @@ class GoalOrientedModel(InferenceModel):
 
     # -- covariances QoI --------------------------------------------------
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def posterior_covariance_qoi(
         self,
@@ -81,6 +85,7 @@ class GoalOrientedModel(InferenceModel):
         H = self._h_jacobian(eta)
         return H @ self.inner.posterior_cov_matmul(H.T, eta, design) + self.Sigma_theta
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def prior_covariance_qoi(self, eta: Float[Array, " n_param"]) -> Float[Array, "n_qoi n_qoi"]:
         r"""``H Gamma_eta H^T + Sigma_theta``."""
@@ -89,6 +94,7 @@ class GoalOrientedModel(InferenceModel):
 
     # -- contrat ----------------------------------------------------------
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_det_posterior_precision(
         self,
@@ -97,6 +103,7 @@ class GoalOrientedModel(InferenceModel):
     ) -> Float[Array, ""]:
         return self._log_det_precision_from_cov(self.posterior_covariance_qoi(theta, design))
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_det_prior_precision(self) -> Float[Array, ""]:
         r"""``log det Sigma_theta^{prior,-1}``.
@@ -109,6 +116,7 @@ class GoalOrientedModel(InferenceModel):
         """
         return self._log_det_precision_from_cov(self.prior_covariance_qoi(self.inner.prior.mu))
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def posterior_cov_matmul(
         self,

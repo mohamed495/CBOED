@@ -1,5 +1,7 @@
 """Priors gaussiens : processus gaussien + façade inférentielle."""
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
@@ -102,6 +104,7 @@ class GaussianPrior(Prior):
     def mu(self) -> Float[Array, " n_param"]:
         return self.prior.mu
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_prior(self, theta: Float[Array, " n_param"]) -> Float[Array, ""]:
         """Log-densité gaussienne."""
@@ -111,24 +114,29 @@ class GaussianPrior(Prior):
         logdet = 2.0 * jnp.sum(jnp.log(jnp.diag(self._chol[0])))
         return -0.5 * (n * jnp.log(2 * jnp.pi) + logdet + quad)
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def grad_log_prior(self, theta: Float[Array, " n_param"]) -> Float[Array, " n_param"]:
         return -jsp.linalg.cho_solve(self._chol, theta - self.mu)
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_det_precision(self) -> Float[Array, ""]:
         """``log det Gamma_prior^{-1} = -2 sum log diag L``."""
         return -2.0 * jnp.sum(jnp.log(jnp.diag(self._chol[0])))
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def prior_cov_matmul(self, B: Float[Array, "n_param k"]) -> Float[Array, "n_param k"]:
         return self.prior.Sigma @ B
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def prior_precision_matmul(self, B: Float[Array, "n_param k"]) -> Float[Array, "n_param k"]:
         """``Gamma_prior^{-1} @ B`` par ``cho_solve`` sur les k colonnes."""
         return jsp.linalg.cho_solve(self._chol, B)
 
+    @partial(jax.jit, static_argnums=(0, 2))
     def sample(self, key: PRNGKeyArray, n_samples: int = 1) -> Float[Array, "n_samples n_param"]:
         z = jax.random.normal(key, (n_samples, self.mu.shape[0]))
         return self.mu + z @ self._L.T

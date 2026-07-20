@@ -1,3 +1,5 @@
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
@@ -81,6 +83,7 @@ class Burgers(ForwardModel):
         dflux = (flux[2:] - flux[:-2]) / (2 * self.dx)
         return self.lambda_ * dflux
 
+    @partial(jax.jit, static_argnums=(0,))
     def solve(self, U0):
         """Avance U0 (vecteur complet n+2) sur nt pas. IMEX."""
         lu, r = self._diffusion_factor()

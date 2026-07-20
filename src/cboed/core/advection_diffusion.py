@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -176,6 +177,7 @@ class AdvectionDiffusion(ForwardModel):
         )
         return jsp.linalg.lu_factor(A), kernel_B
 
+    @partial(jax.jit, static_argnums=(0,))
     def solve(self, U0: Float[Array, " n_plus_2"]) -> Float[Array, " n_plus_2"]:
         """Avance U0 (vecteur complet) sur nt pas. A factorise une fois."""
         lu, kernel_B = self._factor()

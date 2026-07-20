@@ -32,6 +32,8 @@ remarque 3.1 reste valide sans bruit (``eta|theta`` dégénère proprement en ``
 Là où la voie gradient a une limite singulière, la voie échantillon n'en a pas.
 """
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 from beartype import beartype
@@ -41,6 +43,7 @@ from jaxtyping import Float, PRNGKeyArray, jaxtyped
 from cboed.priors.base import Prior
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def _paired_covariance(
     diffs: Float[Array, "n_samples n_obs"],
@@ -50,6 +53,7 @@ def _paired_covariance(
     return 0.5 * (out + out.T)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def _psd_sqrt(A: Float[Array, "n n"]) -> Float[Array, "n n"]:
     r"""Racine PSD par ``eigh``, valeurs propres écrêtées à zéro.
@@ -63,6 +67,7 @@ def _psd_sqrt(A: Float[Array, "n n"]) -> Float[Array, "n n"]:
     return P @ jnp.diag(jnp.sqrt(jnp.clip(ev, 0.0, None)))
 
 
+@partial(jax.jit, static_argnums=(0, 1, 4))
 @jaxtyped(typechecker=beartype)
 def sample_Sigma_Y(
     u,
@@ -90,6 +95,7 @@ def sample_Sigma_Y(
     return Sigma_obs + _paired_covariance(diffs)
 
 
+@partial(jax.jit, static_argnums=(0, 1, 6))
 @jaxtyped(typechecker=beartype)
 def sample_Sigma_Y_given_theta(
     u,
@@ -142,6 +148,7 @@ def sample_Sigma_Y_given_theta(
     return Sigma_obs + _paired_covariance(diffs)
 
 
+@partial(jax.jit, static_argnums=(0, 1, 4))
 @jaxtyped(typechecker=beartype)
 def sample_diagnostics_standard(
     u,

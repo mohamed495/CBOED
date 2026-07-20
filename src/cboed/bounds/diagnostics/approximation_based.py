@@ -29,6 +29,7 @@ from jaxtyping import Float, jaxtyped
 from cboed.bounds.diagnostics.denoisers import Denoiser
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def denoiser_residual(
     denoiser: Denoiser,
@@ -71,6 +72,13 @@ def assemble_from_residual(
     ValueError
         Si ``R`` depasse ``Sigma_obs`` bien au-dela du bruit d'estimation -- le
         debruiteur *degrade* le residu au-dela du bruit d'observation.
+
+    Notes
+    -----
+    ⚠️ Pas de ``jit`` : le ``if`` ci-dessous teste une valeur qui depend de ``R``
+    (donc tracee sous jit), et ``ValueError`` exige un bool concret. Meme
+    limitation pour :func:`approximation_signal`/:func:`approximation_noise`, qui
+    appellent cette fonction.
     """
     n = R.shape[0]
     tol = 10.0 * jnp.trace(R) / n / jnp.sqrt(n_samples)

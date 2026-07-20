@@ -1,5 +1,8 @@
 """Critères de design : quelle quantité on optimise."""
 
+from functools import partial
+
+import jax
 import jax.numpy as jnp
 from beartype import beartype
 from jax import Array
@@ -20,6 +23,7 @@ class EIG(Criterion):
     trahit l'inversion.
     """
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def evaluate(
         self,
@@ -41,6 +45,7 @@ class DOptimal(Criterion):
     une à une (E-optimal).
     """
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def evaluate(
         self,
@@ -63,6 +68,7 @@ class AOptimal(Criterion):
     **sans changer ni le contrat ni ce critère**.
     """
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def evaluate(
         self,

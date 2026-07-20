@@ -54,6 +54,7 @@ class AffineDenoiser(eqx.Module):
         return self.A @ features + self.b
 
     @staticmethod
+    @jax.jit
     def fit(
         u_samples: Float[Array, "n_samples n_obs"],
         features: Float[Array, "n_samples n_feat"],

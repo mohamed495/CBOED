@@ -41,6 +41,7 @@ exactement affine, et ``Sigma^{(F)}_signal`` **égale** la voie gradient -- c'es
 l'oracle inter-modules.
 """
 
+import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
 from beartype import beartype
@@ -48,6 +49,7 @@ from jax import Array
 from jaxtyping import Float, jaxtyped
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def affine_denoiser(
     u_samples: Float[Array, "n_samples n_obs"],
@@ -86,6 +88,7 @@ def affine_denoiser(
     return A, u_bar - A @ f_bar
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def denoiser_residual(
     u_samples: Float[Array, "n_samples n_obs"],
@@ -104,6 +107,7 @@ def denoiser_residual(
     return 0.5 * (out + out.T)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def _assemble_from_residual(
     R: Float[Array, "n_obs n_obs"],
@@ -123,6 +127,7 @@ def _assemble_from_residual(
     return 0.5 * (out + out.T)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def approximation_signal(
     u_samples: Float[Array, "n_samples n_obs"],
@@ -142,6 +147,7 @@ def approximation_signal(
     return _assemble_from_residual(R_f, Sigma_obs)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def approximation_noise(
     u_samples: Float[Array, "n_samples n_obs"],

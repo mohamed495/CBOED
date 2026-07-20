@@ -22,6 +22,7 @@ de base), ``W_m^T \Sigma W_m`` est la sous-matrice ``Sigma[ix_(design, design)]`
 cf. ``core/selection.py``, qui est déjà ce ``W_m^T``.
 """
 
+import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
 from beartype import beartype
@@ -29,6 +30,7 @@ from jax import Array
 from jaxtyping import Float, Int, jaxtyped
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def schur_complement(
     Sigma: Float[Array, "n_obs n_obs"],
@@ -67,10 +69,11 @@ def schur_complement(
     return 0.5 * (out + out.T)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def schur_update(
     Sigma_cond: Float[Array, "n_obs n_obs"],
-    j: int,
+    j: Int[Array, ""] | int,
 ) -> Float[Array, "n_obs n_obs"]:
     r"""Ajoute le capteur ``j`` à un complément de Schur -- update **rank-1**.
 
@@ -106,6 +109,7 @@ def schur_update(
     return 0.5 * (out + out.T)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def schur_gain_diagonal(
     Sigma_num_cond: Float[Array, "n_obs n_obs"],
@@ -154,6 +158,7 @@ def schur_gain_diagonal(
     return gain
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def log_ratio(
     Sigma_num: Float[Array, "n_obs n_obs"],

@@ -1,5 +1,7 @@
 """Postérieure linéaire-gaussienne."""
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
@@ -34,6 +36,7 @@ class LinearModel(InferenceModel):
 
     # -- précision et factorisation ---------------------------------------
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def posterior_precision(
         self,
@@ -57,11 +60,20 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> tuple[Float[Array, "n_param n_param"], bool]:
-        """Factorisation partagée. `y`-indépendante : hissable hors des boucles."""
+        """Factorisation partagée. `y`-indépendante : hissable hors des boucles.
+
+        ⚠️ Pas de ``jit`` ici : la sortie de ``cho_factor`` contient un ``bool``
+        (``lower``), et jit re-boxe les sorties scalaires en ``jax.Array`` --
+        ``cho_solve`` en aval a besoin d'un ``bool`` Python concret pour son
+        propre ``static_argnames``. Inlinee sans probleme dans les methodes
+        jittees qui l'appellent (meme mecanisme que ``_obs_chol`` dans
+        ``GaussianLikelihood``).
+        """
         return jsp.linalg.cho_factor(self.posterior_precision(theta, design), lower=True)
 
     # -- contrat ----------------------------------------------------------
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_det_posterior_precision(
         self,
@@ -71,10 +83,12 @@ class LinearModel(InferenceModel):
         chol = self._posterior_chol(theta, design)
         return 2.0 * jnp.sum(jnp.log(jnp.diag(chol[0])))
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_det_prior_precision(self) -> Float[Array, ""]:
         return self.prior.log_det_precision()
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def posterior_cov_matmul(
         self,
@@ -91,6 +105,7 @@ class LinearModel(InferenceModel):
 
     # -- moyenne postérieure (dépend de y) --------------------------------
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def _mu(
         self,
@@ -116,6 +131,7 @@ class LinearModel(InferenceModel):
 
         return theta + correction
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def _cov(
         self,
@@ -130,6 +146,7 @@ class LinearModel(InferenceModel):
         n = theta.shape[0]
         return self.posterior_cov_matmul(jnp.eye(n, dtype=theta.dtype), theta, design)
 
+    @partial(jax.jit, static_argnums=(0, 5))
     @jaxtyped(typechecker=beartype)
     def sample(
         self,

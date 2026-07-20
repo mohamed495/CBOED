@@ -1,5 +1,7 @@
 """Vraisemblance gaussienne à bruit additif."""
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
@@ -46,6 +48,7 @@ class GaussianLikelihood(Likelihood):
         Sigma = self.Sigma_obs if design is None else self.Sigma_obs[jnp.ix_(design, design)]
         return jsp.linalg.cho_factor(Sigma, lower=True)
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_likelihood(
         self,
@@ -68,6 +71,7 @@ class GaussianLikelihood(Likelihood):
         """Déjà composé avec ``H(design)`` par le modèle direct."""
         return self.model.jacobian_operator(theta, design)
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def precision_weighted_residual(
         self,
@@ -84,6 +88,7 @@ class GaussianLikelihood(Likelihood):
         r = y - self.model(theta=theta, design=design)
         return jsp.linalg.cho_solve(self._obs_chol(design), r)
 
+    @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def grad_log_likelihood(
         self,
@@ -112,6 +117,7 @@ class GaussianLikelihood(Likelihood):
         # rmatvec dupliqué -- ne pas « corriger ».
         return LinearizedOperator(matvec, matvec, (n, n))
 
+    @partial(jax.jit, static_argnums=(0, 4))
     def sample(
         self,
         key: PRNGKeyArray,

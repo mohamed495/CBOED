@@ -19,6 +19,8 @@ Assemblage (35)-(36)
 `J(h)` est la seule différence entre les deux.
 """
 
+from functools import partial
+
 import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
@@ -29,6 +31,7 @@ from jaxtyping import Float, PRNGKeyArray, jaxtyped
 from cboed.priors.base import Prior
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def psd_sqrt(A: Float[Array, "n n"]) -> Float[Array, "n n"]:
     """Racine PSD par ``eigh``, valeurs propres écrêtées à zéro.
@@ -59,6 +62,7 @@ def _expected_quadratic(
 # =============================================================================
 
 
+@partial(jax.jit, static_argnums=(0,))
 @jaxtyped(typechecker=beartype)
 def expected_jacobian_moments(
     u,
@@ -91,6 +95,7 @@ def expected_jacobian_moments(
     return J_bar.T, _expected_quadratic(Jacs - J_bar, chol_obs)
 
 
+@partial(jax.jit, static_argnums=(0,))
 @jaxtyped(typechecker=beartype)
 def qoi_fisher_moment(
     h,
@@ -110,6 +115,7 @@ def qoi_fisher_moment(
     return _expected_quadratic(Jacs_h, chol_xi)
 
 
+@partial(jax.jit, static_argnums=(0,))
 @jaxtyped(typechecker=beartype)
 def fisher_information_prior(prior_eta: Prior) -> Float[Array, "n_eta n_eta"]:
     r"""``I_eta = Cov(grad log pi(eta))`` -- équation (34), cas gaussien.
@@ -124,6 +130,7 @@ def fisher_information_prior(prior_eta: Prior) -> Float[Array, "n_eta n_eta"]:
     return prior_eta.prior_precision_matmul(jnp.eye(q, dtype=prior_eta.mu.dtype))
 
 
+@partial(jax.jit, static_argnums=(0, 2))
 @jaxtyped(typechecker=beartype)
 def fisher_information_prior_mc(
     prior_eta: Prior, key: PRNGKeyArray, n_samples: int
@@ -144,6 +151,7 @@ def fisher_information_prior_mc(
 # =============================================================================
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def assemble(
     L: Float[Array, "n_eta n_obs"],
@@ -160,6 +168,7 @@ def assemble(
     return 0.5 * (out + out.T)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def assemble_misfit(
     L: Float[Array, "n_eta n_obs"],
@@ -207,6 +216,7 @@ def assemble_misfit(
 # =============================================================================
 
 
+@partial(jax.jit, static_argnums=(0, 1, 2, 6))
 @jaxtyped(typechecker=beartype)
 def gradient_diagnostics(
     u,
@@ -231,6 +241,7 @@ def gradient_diagnostics(
     return assemble(L, H + I_eta, Sigma_obs), assemble(L, H + I_eta + J_h, Sigma_obs)
 
 
+@partial(jax.jit, static_argnums=(0, 1, 4))
 @jaxtyped(typechecker=beartype)
 def gradient_diagnostics_standard(
     u,

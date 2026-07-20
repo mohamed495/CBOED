@@ -1,6 +1,7 @@
 """Contrat de vraisemblance."""
 
 from abc import ABC, abstractmethod
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -76,6 +77,7 @@ class Likelihood(ABC):
 
     # -- oracles denses : matérialisés depuis les opérateurs ---------------
 
+    @partial(jax.jit, static_argnums=(0,))
     def jacobian(
         self,
         theta: Float[Array, " n_param"],
@@ -89,6 +91,7 @@ class Likelihood(ABC):
         op = self.jacobian_operator(theta, design)
         return jax.vmap(op.matvec)(jnp.eye(op.shape[1])).T
 
+    @partial(jax.jit, static_argnums=(0,))
     def hessian(
         self,
         theta: Float[Array, " n_param"],

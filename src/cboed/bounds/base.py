@@ -1,9 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+import jax
 from jax import Array
 from jaxtyping import Float
 
 
+@jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class DiagnosticMatrices:
     r"""``Sigma_Y``, ``Sigma_Y_given_theta``, ``Sigma_signal``, ``Sigma_noise``.
@@ -53,4 +55,4 @@ class DiagnosticMatrices:
     Sigma_Y_given_theta: Float[Array, "n_obs n_obs"]
     Sigma_signal: Float[Array, "n_obs n_obs"]
     Sigma_noise: Float[Array, "n_obs n_obs"]
-    certified: bool
+    certified: bool = field(metadata=dict(static=True))

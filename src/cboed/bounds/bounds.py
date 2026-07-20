@@ -22,8 +22,9 @@ incrémental, **décroît** en conservatif. Petit budget -> incrémental ; grand
 borne sup conservative. Et inversement.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+import jax
 from beartype import beartype
 from jax import Array
 from jaxtyping import Float, Int, jaxtyped
@@ -32,13 +33,14 @@ from cboed.bounds.base import DiagnosticMatrices
 from cboed.bounds.schur import log_ratio
 
 
+@jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class BoundResult:
     """Encadrement certifié de ``EIG(design)``."""
 
     lower: Float[Array, ""]
     upper: Float[Array, ""]
-    certified: bool
+    certified: bool = field(metadata=dict(static=True))
     """L'ordre de Loewner du Thm 2.1 est-il garanti ? (hérité du diagnostic)"""
 
     @property
@@ -58,6 +60,7 @@ class BoundResult:
         return bool(self.gap < tolerance)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def incremental_bounds(
     diagnostics: DiagnosticMatrices,
@@ -80,6 +83,7 @@ def incremental_bounds(
     )
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def conservative_bounds(
     diagnostics: DiagnosticMatrices,

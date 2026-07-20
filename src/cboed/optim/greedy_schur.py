@@ -25,6 +25,7 @@ payé, une fois, dans la construction de ``A`` et ``B``.
 ⚠️ ``optim/greedy.py`` reste l'**oracle** de ce module. Ne pas le supprimer.
 """
 
+import jax
 import jax.numpy as jnp
 from beartype import beartype
 from jax import Array
@@ -97,6 +98,7 @@ def greedy_schur(
     return Result(design=jnp.asarray(selected, dtype=int), scores=scores)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def log_ratio(
     Sigma_num: Float[Array, "n_obs n_obs"],

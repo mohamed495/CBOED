@@ -49,6 +49,7 @@ cadre standard isole ``gap_G``, y compris spectralement.
 
 from dataclasses import dataclass
 
+import jax
 import jax.numpy as jnp
 import jax.scipy as jsp
 from beartype import beartype
@@ -58,6 +59,7 @@ from jaxtyping import Float, jaxtyped
 from cboed.bounds.base import DiagnosticMatrices
 
 
+@jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class QuasiOptimality:
     """Le spectre du gap et ce qu'il coûte."""
@@ -135,6 +137,7 @@ class QuasiOptimality:
         return int(jnp.searchsorted(jnp.cumsum(terms) / total, 0.9) + 1)
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def generalized_eigenvalues(
     A: Float[Array, "n_obs n_obs"],
@@ -153,6 +156,7 @@ def generalized_eigenvalues(
     return jnp.flip(jnp.linalg.eigvalsh(0.5 * (C + C.T)))
 
 
+@jax.jit
 @jaxtyped(typechecker=beartype)
 def quasi_optimality(diagnostics: DiagnosticMatrices) -> QuasiOptimality:
     """Le spectre du gap -- Prop. 1.
