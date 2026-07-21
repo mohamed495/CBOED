@@ -499,7 +499,7 @@ def main():
     all_once: dict = {}
     per_method_all: dict = {}
 
-    print("Calcul (par lambda x cas)")
+    print("Calcul + figures (par lambda x cas, au fur et a mesure)")
     for lambda_ in args.lambdas:
         for case in args.cases:
             once, per_method = load_or_compute(
@@ -513,13 +513,18 @@ def main():
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method
 
-    print("Figures")
-    if (0.0, "standard") in all_once:
-        fig_reconstruction_standard(all_once[(0.0, "standard")], out)
-    if (0.0, "go") in all_once:
-        fig_reconstruction_go(all_once[(0.0, "go")], out)
-    fig_spectrum(all_once, out)
-    fig_boxplots(per_method_all, args.budgets, out)
+            # Figures de ce (lambda, cas) tout de suite -- pas d'attente sur le
+            # reste du balayage. fig_spectrum se redessine a chaque fois avec
+            # tout ce qui est disponible jusqu'ici (une courbe par lambda>0
+            # deja calcule) : elle se complete au fil du balayage plutot que
+            # d'apparaitre d'un coup a la fin.
+            print(f"  figures lambda={lambda_} case={case} ...", flush=True)
+            if lambda_ == 0.0 and case == "standard":
+                fig_reconstruction_standard(once, out)
+            if lambda_ == 0.0 and case == "go":
+                fig_reconstruction_go(once, out)
+            fig_spectrum(all_once, out)
+            fig_boxplots({(lambda_, case): per_method}, args.budgets, out)
 
     print(f"\n-> {out.resolve()}")
 

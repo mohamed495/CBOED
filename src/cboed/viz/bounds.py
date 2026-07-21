@@ -176,20 +176,21 @@ def plot_gap_vs_parameter(values, gaps, xlabel=r"$\lambda$", mc_floor=None, titl
 #: Palette categorielle validee (skill dataviz, references/palette.md) -- ordre
 #: fixe, jamais recycle : slots 1-4 (bleu, vert, magenta, jaune), les seuls
 #: quatre qui passent le controle CVD toutes paires confondues. Une couleur par
-#: serie ; le trait plein partout (les 4 teintes suffisent a l'identite, pas
-#: besoin d'un pointille en plus). Toutes les series partagent la meme position
-#: ``x`` (pas de decalage) : quand deux series sont proches en valeur, leurs
-#: boites se superposent -- c'est l'information (les bornes se resserrent), pas
-#: un defaut d'affichage.
+#: serie, plus un trait (plein/pointille) qui encode la famille (incremental
+#: vs conservatif) -- double encodage demande explicitement (4 series, la
+#: teinte seule ne suffit pas a distinguer vite les deux familles). Toutes les
+#: series partagent la meme position ``x`` (pas de decalage) : quand deux
+#: series sont proches en valeur, leurs boites se superposent -- c'est
+#: l'information (les bornes se resserrent), pas un defaut d'affichage.
 _SERIES_STYLE = {
-    "inc_low": ("#2a78d6", "inc_lb"),
-    "inc_up": ("#008300", "inc_ub"),
-    "cons_low": ("#e87ba4", "cons_lb"),
-    "cons_up": ("#eda100", "cons_ub"),
+    "inc_low": ("#2a78d6", "inc_lb", "-"),
+    "inc_up": ("#008300", "inc_ub", "-"),
+    "cons_low": ("#e87ba4", "cons_lb", "--"),
+    "cons_up": ("#eda100", "cons_ub", "--"),
 }
 
 
-def _boxplot_series(ax, ms, values, color, label):
+def _boxplot_series(ax, ms, values, color, label, linestyle="-"):
     """Ligne (mediane sur les repetitions) + boxplot a chaque ``m`` -- une serie.
 
     ``values`` : ``(n_repeats, n_budgets)``. A ``n_repeats = 1``, la mediane
@@ -197,7 +198,10 @@ def _boxplot_series(ax, ms, values, color, label):
     normal, pas une erreur.
     """
     values = np.atleast_2d(values)
-    ax.plot(ms, np.median(values, axis=0), color=color, lw=2.0, zorder=2, solid_capstyle="round")
+    ax.plot(
+        ms, np.median(values, axis=0), color=color, lw=2.0, ls=linestyle, zorder=2,
+        solid_capstyle="round", dash_capstyle="round",
+    )
     width = (ms[1] - ms[0]) * 0.3 if len(ms) > 1 else 0.6
     line_props = dict(color=color, linewidth=1.4)
     ax.boxplot(
@@ -207,13 +211,16 @@ def _boxplot_series(ax, ms, values, color, label):
         boxprops=dict(edgecolor=color, facecolor=color, alpha=0.12, linewidth=1.2),
         zorder=3,
     )
-    return Line2D([0], [0], color=color, lw=2.0, label=label)
+    return Line2D([0], [0], color=color, lw=2.0, ls=linestyle, label=label)
 
 
 def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, ax=None, title=""):
     """Comme :func:`plot_bounds_vs_m`, mais un boxplot (sur les repetitions) a
     chaque ``m`` plutot qu'une bande continue -- 4 series superposees, une
-    couleur chacune (cf. ``_SERIES_STYLE``), comme le prototype NumPy.
+    couleur et un trait chacune (cf. ``_SERIES_STYLE``), comme le prototype
+    NumPy. La zone entre borne inf et borne sup de chaque famille (le gap
+    certifie, Prop. 1) est hachuree -- existe pour l'incremental **et** le
+    conservatif, pas seulement l'un des deux.
 
     Parameters
     ----------
@@ -229,6 +236,17 @@ def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, a
     if cons_low is not None:
         series["cons_low"] = cons_low
         series["cons_up"] = cons_up
+
+    med = {key: np.median(np.atleast_2d(arr), axis=0) for key, arr in series.items()}
+    ax.fill_between(
+        ms, med["inc_low"], med["inc_up"],
+        facecolor="none", edgecolor="0.35", hatch="////", linewidth=0.0, zorder=1,
+    )
+    if "cons_low" in med:
+        ax.fill_between(
+            ms, med["cons_low"], med["cons_up"],
+            facecolor="none", edgecolor="0.35", hatch="\\\\\\\\", linewidth=0.0, zorder=1,
+        )
 
     handles = [
         _boxplot_series(ax, ms, arr, *_SERIES_STYLE[key])
