@@ -32,7 +32,7 @@ import jax.scipy as jsp
 from jaxtyping import Array, Float, Int, PRNGKeyArray
 
 from cboed.bounds.diagnostics.gradient_based import psd_sqrt
-from cboed.estimators.base import EIGEstimator
+from cboed.estimators.base import EIGEstimator, chunked_vmap
 
 
 def _eta_given_theta_params(prior_eta, B: Array, Sigma_xi: Array):
@@ -101,6 +101,7 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
         n_outer: int = 1000,
         n_inner_theta: int = 500,
         n_inner_marginal: int = 1000,
+        chunk_size: int | None = None,
     ) -> Float[Array, ""]:
         k_eta, k_xi, k_y, k_theta_inner, k_marg_inner = jax.random.split(key, 5)
 
@@ -125,7 +126,9 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
             return jsp.special.logsumexp(lls) - jnp.log(n_inner_theta)
 
         keys_theta_inner = jax.random.split(k_theta_inner, n_outer)
-        log_lik_matched = jax.vmap(log_lik_given_theta)(y_outer, theta_outer, keys_theta_inner)
+        log_lik_matched = chunked_vmap(
+            log_lik_given_theta, y_outer, theta_outer, keys_theta_inner, chunk_size=chunk_size
+        )
 
         # -- log p(y_i) : marginal usuel, MC imbrique sur eta ~ prior --------
         def log_marginal(y, k):
@@ -134,6 +137,6 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
             return jsp.special.logsumexp(lls) - jnp.log(n_inner_marginal)
 
         keys_marg_inner = jax.random.split(k_marg_inner, n_outer)
-        log_marg = jax.vmap(log_marginal)(y_outer, keys_marg_inner)
+        log_marg = chunked_vmap(log_marginal, y_outer, keys_marg_inner, chunk_size=chunk_size)
 
         return jnp.mean(log_lik_matched - log_marg)

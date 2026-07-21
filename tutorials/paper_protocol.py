@@ -167,15 +167,24 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
 
 
 def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_inner: int,
-                       nmc_n_inner_theta: int, nmc_n_inner_marginal: int):
-    """``EIG(I_p)`` par MC imbrique -- utilise pour ``eig_full`` de la borne conservative."""
+                       nmc_n_inner_theta: int, nmc_n_inner_marginal: int, nmc_chunk_size: int | None = None):
+    """``EIG(I_p)`` par MC imbrique -- utilise pour ``eig_full`` de la borne conservative.
+
+    ``nmc_chunk_size`` : borne la memoire de crete a ``chunk_size x n_inner``
+    (au lieu de ``n_outer x n_inner``) en traitant la boucle externe par lots
+    sequentiels -- voir ``cboed.estimators.base.chunked_vmap``. Indispensable
+    sur GPU des que ``n_outer x n_inner`` (ou ``n_inner_theta``/``n_inner_marginal``
+    en GO) depasse la memoire disponible -- c'est la cause du OOM observe avec
+    les gros ``--nmc-*`` par defaut.
+    """
     prior, model, u, likelihood, inference, go = build_case(lambda_, case)
     if case == "standard":
         est = NestedMonteCarloEIG(likelihood=likelihood, prior=prior)
-        return est.estimate(key, n_outer=nmc_n_outer, n_inner=nmc_n_inner)
+        return est.estimate(key, n_outer=nmc_n_outer, n_inner=nmc_n_inner, chunk_size=nmc_chunk_size)
     est = GoalOrientedNestedMonteCarloEIG(likelihood=likelihood, prior_eta=prior, B=B_QOI, Sigma_xi=SIGMA_XI_QOI)
     return est.estimate(
-        key, n_outer=nmc_n_outer, n_inner_theta=nmc_n_inner_theta, n_inner_marginal=nmc_n_inner_marginal
+        key, n_outer=nmc_n_outer, n_inner_theta=nmc_n_inner_theta, n_inner_marginal=nmc_n_inner_marginal,
+        chunk_size=nmc_chunk_size,
     )
 
 
@@ -231,7 +240,7 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
 
 def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_steps,
                          nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed,
-                         eig_full_mode="certified"):
+                         eig_full_mode="certified", nmc_chunk_size=None):
     """Boucle de repetition -- diagnostics 'une fois' (repeat 0) + bornes par repetition.
 
     Parameters
@@ -259,7 +268,8 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
         eig_full_mc = None
         if eig_full_mode == "mc":
             eig_full_mc = estimate_eig_full(
-                lambda_, case, k_eig, nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal
+                lambda_, case, k_eig, nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal,
+                nmc_chunk_size=nmc_chunk_size,
             )
         if r == 0:
             once = (Sigma_Y, Sigma_Y_given_theta, methods_diag)
@@ -469,6 +479,15 @@ def main():
         help="Borne conservative : 'certified' (defaut, comme make_figures.py, Cor. 1 au design"
              " complet) ou 'mc' (NMC -- decertifie, biaise fortement a petite echelle).",
     )
+    p.add_argument(
+        "--nmc-chunk-size", type=int, default=200,
+        help="Borne la memoire de crete du NMC (eig-full-mode=mc) a chunk_size x n_inner au lieu"
+             " de n_outer x n_inner, en traitant la boucle externe par lots sequentiels"
+             " (cboed.estimators.base.chunked_vmap). Necessaire sur GPU des que"
+             " n_outer x n_inner (ou n_inner_theta/n_inner_marginal en GO) sature la memoire --"
+             " c'est la cause du OOM avec les --nmc-* par defaut sans chunking. Augmenter si le"
+             " GPU a de la marge (plus rapide), reduire s'il OOM encore.",
+    )
     p.add_argument("--out", default="figures_protocol")
     p.add_argument("--cache", default=".cache_protocol")
     p.add_argument("--force", action="store_true")
@@ -489,6 +508,7 @@ def main():
                 net_steps=args.net_steps, nmc_n_outer=args.nmc_n_outer, nmc_n_inner=args.nmc_n_inner,
                 nmc_n_inner_theta=args.nmc_n_inner_theta, nmc_n_inner_marginal=args.nmc_n_inner_marginal,
                 budgets=args.budgets, base_seed=args.seed, eig_full_mode=args.eig_full_mode,
+                nmc_chunk_size=args.nmc_chunk_size,
             )
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method

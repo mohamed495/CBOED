@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, Int, PRNGKeyArray
 
-from cboed.estimators.base import EIGEstimator
+from cboed.estimators.base import EIGEstimator, chunked_vmap
 
 
 class NestedMonteCarloEIG(EIGEstimator):
@@ -27,6 +27,7 @@ class NestedMonteCarloEIG(EIGEstimator):
         design: Int[Array, " n_obs"] | None = None,
         n_outer: int = 1000,
         n_inner: int = 1000,
+        chunk_size: int | None = None,
     ) -> Float[Array, ""]:
         k_theta, k_y, k_inner = jax.random.split(key, 3)
 
@@ -51,6 +52,6 @@ class NestedMonteCarloEIG(EIGEstimator):
             )  # (M,)
             return jax.scipy.special.logsumexp(lls) - jnp.log(n_inner)
 
-        log_marg = jax.vmap(log_marginal)(ys)  # (N,)
+        log_marg = chunked_vmap(log_marginal, ys, chunk_size=chunk_size)  # (N,)
 
         return jnp.mean(log_lik_matched - log_marg)
