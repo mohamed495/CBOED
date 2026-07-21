@@ -10,6 +10,24 @@ from matplotlib.lines import Line2D
 from cboed.viz.style import COLORS
 
 
+def _mark_sensors_rug(ax, x, sensors, height_frac=0.045):
+    """Short ticks anchored at the bottom of the axis -- one per sensor.
+
+    Unlike a full-height ``axvline``, these never cross the plotted
+    trajectories: they sit in a thin band at the current bottom of the axis,
+    sized as a fraction of the y-range so the mark stays visible regardless
+    of scale.
+    """
+    ymin, ymax = ax.get_ylim()
+    tick_h = height_frac * (ymax - ymin)
+    for j in np.asarray(sensors):
+        ax.plot(
+            [x[j], x[j]], [ymin, ymin + tick_h],
+            color=COLORS["sensors"], lw=2.2, solid_capstyle="butt", zorder=4,
+        )
+    ax.set_ylim(ymin, ymax)
+
+
 def plot_field_samples(
     x,
     samples,
@@ -54,15 +72,8 @@ def plot_field_samples(
     if truth is not None:
         ax.plot(x, truth, color=COLORS["truth"], lw=2.0, ls="--", label=r"$\theta_{\rm true}$")
     if sensors is not None:
-        ax.plot(
-            np.asarray(x)[np.asarray(sensors)],
-            np.full(len(sensors), ax.get_ylim()[0]),
-            "|",
-            color=COLORS["sensors"],
-            ms=12,
-            mew=2,
-            label="sensors",
-        )
+        _mark_sensors_rug(ax, np.asarray(x), sensors)
+        ax.plot([], [], color=COLORS["sensors"], lw=2.2, label="sensors")
 
     ax.set_xlabel("$x$")
     ax.legend(fontsize=7, ncol=2)
@@ -121,9 +132,8 @@ def plot_reconstruction(
             Patch(facecolor=COLORS["sensors"], alpha=0.15, label="QoI region (goal-oriented)")
         )
     if sensors is not None:
-        for j in np.asarray(sensors):
-            ax.axvline(x[j], color=COLORS["sensors"], lw=0.8, alpha=0.5)
-        handles.append(Line2D([0], [0], color=COLORS["sensors"], lw=1.5, label="sensors"))
+        _mark_sensors_rug(ax, x, sensors)
+        handles.append(Line2D([0], [0], color=COLORS["sensors"], lw=2.2, label="sensors"))
 
     if laplace_warning:
         ax.text(
@@ -149,12 +159,20 @@ def plot_contraction(x, prior_std, posterior_std, sensors=None):
     it is what distinguishes two designs of the same budget.
     """
     fig, ax = plt.subplots(figsize=(7, 2.8))
+    x = np.asarray(x)
     ratio = np.asarray(posterior_std) / np.asarray(prior_std)
     ax.plot(x, ratio, color=COLORS["posterior"], lw=1.8)
     ax.axhline(1.0, color="0.6", lw=0.8, ls=":")
     if sensors is not None:
-        for j in np.asarray(sensors):
-            ax.axvline(np.asarray(x)[j], color=COLORS["sensors"], lw=0.8, alpha=0.5)
+        # Anchored directly on the curve rather than a separate vertical mark:
+        # the dot already sits at the local contraction value, so it doubles
+        # as "how much this sensor actually helped" -- no extra visual layer.
+        j = np.asarray(sensors)
+        ax.plot(
+            x[j], ratio[j], marker="o", ls="none",
+            color=COLORS["sensors"], ms=8, mec="white", mew=1.0, zorder=5, label="sensors",
+        )
+        ax.legend(fontsize=7, loc="lower right")
     ax.set_xlabel("$x$")
     ax.set_ylabel(r"$\sigma_{post} / \sigma_{prior}$")
     ax.set_ylim(0, 1.1)
