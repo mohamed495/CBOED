@@ -40,7 +40,7 @@ def setup() -> Setup:
 
 
 def test_batch_reopt_at_least_as_good(setup):
-    """Le greedy avec réoptimisation ≥ greedy simple."""
+    """Greedy with reoptimization >= plain greedy."""
     eig = EIG(inference=setup.inference)
     theta = setup.prior.mu
 
@@ -53,7 +53,7 @@ def test_batch_reopt_at_least_as_good(setup):
 
 
 def test_batch_reopt_valid_design(setup):
-    """Design valide : bon nombre, pas de doublon."""
+    """Valid design: correct count, no duplicates."""
     eig = EIG(inference=setup.inference)
     result = GreedyBatchReopt(criterion=eig).run(setup.prior.mu, 3, 20)
     assert len(result.design) == 3

@@ -23,11 +23,11 @@ def draws():
 
 
 def test_prior_is_well_conditioned():
-    """`Matern32(0.2)` sur 200 points : la Gram tient-elle ?
+    """`Matern32(0.2)` on 200 points: does the Gram matrix hold up?
 
-    `cho_factor` rend des `nan` **sans lever** sur une Gram trop mal conditionnee.
-    Le symptome se voit a `-inf` (XLA initialise `max` a `-inf`, et `nan > -inf` est
-    `False`), pas a `nan`.
+    `cho_factor` returns `nan` **without raising** on a poorly conditioned Gram
+    matrix. The symptom shows up as `-inf` (XLA initializes `max` to `-inf`, and
+    `nan > -inf` is `False`), not as `nan`.
     """
     prior = make_prior()
     cond = float(jnp.linalg.cond(prior.prior.Sigma))
@@ -38,24 +38,25 @@ def test_prior_is_well_conditioned():
 
 @pytest.mark.parametrize("lambda_", LAMBDAS)
 def test_bench_is_resolved(draws, lambda_):
-    """`Pe <= 2` et `CFL <= 1`. Garde-fou : sans lui, le gap mesure la divergence."""
+    """`Pe <= 2` and `CFL <= 1`. Safety net: without it, the gap measures divergence."""
     _, u_max = draws
     pe, c = peclet(u_max), cfl(u_max, lambda_)
     print(f"lambda={lambda_:>5.2f}  Pe={pe:>5.2f}  CFL={c:>5.2f}  max|theta|={u_max:.2f}")
-    assert pe <= 2.0, f"Pe={pe:.2f} : sous-resolu, monter n ou nu"
-    assert c <= 1.0, f"CFL={c:.2f} : monter nt"
+    assert pe <= 2.0, f"Pe={pe:.2f}: under-resolved, increase n or nu"
+    assert c <= 1.0, f"CFL={c:.2f}: increase nt"
 
 
 def test_lg_reference_at_lambda_zero():
-    """⭐ La reference exacte : a `lambda=0`, aucune quantite n'a besoin de Monte-Carlo.
+    """⭐ The exact reference: at `lambda=0`, no quantity needs Monte Carlo.
 
-        J = jacobienne (constante)
+        J = Jacobian (constant)
         Sigma_Y = Sigma_signal = Sigma_obs + J Sigma_theta J^T
 
-    C'est contre elle que se mesurent l'echantillonnage actuel, un futur Halton, et
-    le surrogate (§3.2). Sans elle, un changement d'echantillonneur est invisible.
+    This is what current sampling, a future Halton sequence, and the surrogate
+    (§3.2) are all measured against. Without it, a change of sampler is invisible.
 
-    Le chiffre imprime est **l'erreur du MC actuel a N donne** : c'est l'etalon.
+    The printed number is **the error of the current MC estimator at a given N**:
+    that's the yardstick.
     """
     prior = make_prior()
     model = make_model(0.0)
@@ -65,5 +66,5 @@ def test_lg_reference_at_lambda_zero():
     sampled = sample_Sigma_Y(forward(0.0), prior, SIGMA_OBS_MATRIX, jr.key(0), N_SAMPLES_REFERENCE)
 
     rel = float(jnp.linalg.norm(sampled - exact) / jnp.linalg.norm(exact))
-    print(f"\nN={N_SAMPLES_REFERENCE:,} -> erreur relative sur Sigma_Y = {rel:.3e}")
+    print(f"\nN={N_SAMPLES_REFERENCE:,} -> relative error on Sigma_Y = {rel:.3e}")
     assert rel < 0.05

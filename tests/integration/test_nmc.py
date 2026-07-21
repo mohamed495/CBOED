@@ -34,18 +34,18 @@ def _make_setup(lambda_: float) -> Setup:
 
 @pytest.fixture
 def setup_linear() -> Setup:
-    """λ=0 : linéaire-gaussien, NMC doit retrouver l'EIG exacte."""
+    """λ=0: linear-Gaussian, NMC must recover the exact EIG."""
     return _make_setup(lambda_=0.0)
 
 
 @pytest.fixture
 def setup_nonlinear() -> Setup:
-    """λ=1 : non-linéaire, pas d'oracle fermé."""
+    """λ=1: nonlinear, no closed-form oracle."""
     return _make_setup(lambda_=1.0)
 
 
 # ─────────────────────────────────────────────────────────
-# Sanity : NMC renvoie un scalaire fini
+# Sanity: NMC returns a finite scalar
 # ─────────────────────────────────────────────────────────
 
 
@@ -57,7 +57,7 @@ def test_nmc_returns_finite_scalar(setup_linear):
 
 
 def test_nmc_is_deterministic_given_key(setup_linear):
-    """Même clé → même estimation."""
+    """Same key -> same estimate."""
     nmc = NestedMonteCarloEIG(likelihood=setup_linear.likelihood, prior=setup_linear.gaussian_prior)
     a = nmc.estimate(jax.random.key(0), n_outer=200, n_inner=200)
     b = nmc.estimate(jax.random.key(0), n_outer=200, n_inner=200)
@@ -65,13 +65,13 @@ def test_nmc_is_deterministic_given_key(setup_linear):
 
 
 # ─────────────────────────────────────────────────────────
-# Convergence : en LG, NMC → EIG exacte (lent)
+# Convergence: in LG, NMC -> exact EIG (slow)
 # ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.slow
 def test_nmc_converges_to_exact_lg(setup_linear):
-    """En linéaire-gaussien, NMC retrouve la formule fermée."""
+    """In the linear-Gaussian case, NMC recovers the closed-form formula."""
     exact = EIG(inference=setup_linear.inference).evaluate(setup_linear.prior.mu)
     nmc = NestedMonteCarloEIG(likelihood=setup_linear.likelihood, prior=setup_linear.gaussian_prior)
     est = nmc.estimate(jax.random.key(0), n_outer=5000, n_inner=5000)
@@ -80,24 +80,24 @@ def test_nmc_converges_to_exact_lg(setup_linear):
 
 @pytest.mark.slow
 def test_nmc_bias_decreases_with_inner(setup_linear):
-    """Le biais NMC (borne basse) décroît quand n_inner augmente."""
+    """The NMC bias (lower bound) decreases as n_inner increases."""
     exact = EIG(inference=setup_linear.inference).evaluate(setup_linear.prior.mu)
     nmc = NestedMonteCarloEIG(likelihood=setup_linear.likelihood, prior=setup_linear.gaussian_prior)
     est_small = nmc.estimate(jax.random.key(0), n_outer=3000, n_inner=100)
     est_large = nmc.estimate(jax.random.key(0), n_outer=3000, n_inner=3000)
-    # NMC sous-estime ; plus M grand, plus on remonte vers l'exact
+    # NMC underestimates; the larger M, the closer it gets to the exact value
     assert est_large >= est_small - 0.05
     assert jnp.abs(est_large - exact) <= jnp.abs(est_small - exact) + 0.05
 
 
 # ─────────────────────────────────────────────────────────
-# Le test de fond : écart Laplace/NMC croît avec λ
+# The core test: the Laplace/NMC gap grows with λ
 # ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.slow
 def test_laplace_error_grows_with_lambda():
-    """L'écart entre Laplace (approx) et NMC (vérité) mesure la non-linéarité."""
+    """The gap between Laplace (approximate) and NMC (ground truth) measures nonlinearity."""
     from cboed.estimators.laplace import LaplaceEIG
 
     key = jax.random.key(0)
@@ -110,5 +110,5 @@ def test_laplace_error_grows_with_lambda():
         )
         gaps.append(float(jnp.abs(eig_laplace - eig_nmc)))
 
-    assert gaps[0] < 0.2  # λ=0 : Laplace ≈ NMC
-    assert gaps[-1] > gaps[0]  # λ=1 : Laplace s'écarte
+    assert gaps[0] < 0.2  # λ=0: Laplace ≈ NMC
+    assert gaps[-1] > gaps[0]  # λ=1: Laplace diverges

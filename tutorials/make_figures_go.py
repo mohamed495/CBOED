@@ -1,30 +1,30 @@
 #!/usr/bin/env python
-r"""Produit les memes figures que ``make_figures.py``, cas goal-oriented.
+r"""Produces the same figures as ``make_figures.py``, goal-oriented case.
 
-QoI ``theta = h(eta) = eta[:N_QOI]`` (premiere moitie du champ), via
-:class:`cboed.inference.goal_oriented.GoalOrientedModel`. Meme separation
-calcul/dessin, meme cache ``.npz`` (dossier different pour ne pas collisionner
-avec le cas standard).
+QoI ``theta = h(eta) = eta[:N_QOI]`` (first half of the field), via
+:class:`cboed.inference.goal_oriented.GoalOrientedModel`. Same
+compute/draw separation, same ``.npz`` cache (different folder to avoid
+colliding with the standard case).
 
-Ce qui change par rapport a ``make_figures.py``
+What changes relative to ``make_figures.py``
 ------------------------------------------------
-``Sigma_signal`` et ``Sigma_Y`` ne dependent pas de ``h`` -- identiques au cas
-standard (memes formules, cf. ``bounds/diagnostics/gradient_based.py``).
-Seuls changent :
+``Sigma_signal`` and ``Sigma_Y`` do not depend on ``h`` -- identical to the
+standard case (same formulas, see ``bounds/diagnostics/gradient_based.py``).
+Only the following change:
 
 - ``Sigma_noise``            : ``assemble(L, H + I_eta + J(h), Sigma_obs)``,
-  ``J(h)`` non nul (contre ``Sigma_noise = Sigma_obs`` exactement en standard).
-- ``Sigma_Y_given_theta``    : estime par ``sample_Sigma_Y_given_theta`` avec
-  ``B`` = matrice de projection (contre ``Sigma_obs`` exactement en standard).
-- reconstruction/contraction : restreintes a la QoI, via
+  ``J(h)`` nonzero (vs. ``Sigma_noise = Sigma_obs`` exactly in the standard case).
+- ``Sigma_Y_given_theta``    : estimated by ``sample_Sigma_Y_given_theta`` with
+  ``B`` = projection matrix (vs. ``Sigma_obs`` exactly in the standard case).
+- reconstruction/contraction : restricted to the QoI, via
   ``GoalOrientedModel.prior_covariance_qoi`` / ``posterior_covariance_qoi``.
-- le critere EIG des gloutons (``fig_greedy``) : ``EIG(inference=go)``, pas
+- the greedy EIG criterion (``fig_greedy``) : ``EIG(inference=go)``, not
   ``EIG(inference=inference)``.
 
-``fig_linear_vs_nonlinear`` reste incluse pour le parallelisme avec le cas
-standard, mais son contenu (``H(u)``, spectres de ``Sigma_Y``/``Sigma_signal``)
-est **identique en substance** au cas standard : ni l'un ni l'autre ne depend
-de ``h``. Rien de goal-oriented n'y est demontre.
+``fig_linear_vs_nonlinear`` is kept for parallelism with the standard case,
+but its content (``H(u)``, spectra of ``Sigma_Y``/``Sigma_signal``) is
+**identical in substance** to the standard case: neither depends on ``h``.
+Nothing goal-oriented is demonstrated there.
 
 Usage
 -----
@@ -77,9 +77,9 @@ from cboed.viz import spectrum as vs
 from cboed.viz.style import save, use_style
 
 QOI_H = qoi_projection(N_QOI)
-B_QOI = jnp.eye(N)[:N_QOI]  # Jacobienne de QOI_H, constante
+B_QOI = jnp.eye(N)[:N_QOI]  # Jacobian of QOI_H, constant
 
-M_GREEDY = 8  # cf. make_figures.py : GreedyBatchReopt ~O(m^2 * n_candidates)
+M_GREEDY = 8  # see make_figures.py: GreedyBatchReopt ~O(m^2 * n_candidates)
 
 N_SAMPLES = 20_000
 N_GRADIENT = 5000
@@ -89,7 +89,7 @@ X_QOI = X[:N_QOI]
 
 
 def _make_go(lambda_: float):
-    """Prior, modele, GoalOrientedModel -- assembles a chaque figure (bon marche)."""
+    """Prior, model, GoalOrientedModel -- assembled for each figure (cheap)."""
     prior = make_prior()
     model = make_model(lambda_)
     likelihood = GaussianLikelihood(model=model, Sigma_obs=SIGMA_OBS_MATRIX)
@@ -99,16 +99,16 @@ def _make_go(lambda_: float):
 
 
 def fig_greedy(d: dict, out: Path) -> None:
-    """Trois gloutons, **un seul critere GO** -- a `lambda = 0` uniquement.
+    """Three greedy strategies, **a single GO criterion** -- at `lambda = 0` only.
 
-    Meme protocole que ``make_figures.py::fig_greedy``, mais le critere est
-    ``EIG(inference=go)`` (information sur la QoI), pas l'EIG plein champ.
+    Same protocol as ``make_figures.py::fig_greedy``, but the criterion is
+    ``EIG(inference=go)`` (information on the QoI), not the full-field EIG.
 
-    Attendu :
-        naif == schur          (`greedy_schur` optimise (Sigma_signal, Sigma_Y_given_theta)
-                                comme oracle du critere boite-noire GO, si l'egalite
-                                de Rem. 2.2 tient aussi en goal-oriented a lambda=0)
-        batch >= naif
+    Expected:
+        naive == schur          (`greedy_schur` optimizes (Sigma_signal, Sigma_Y_given_theta)
+                                as an oracle for the GO black-box criterion, if the
+                                equality of Rem. 2.2 also holds goal-oriented at lambda=0)
+        batch >= naive
     """
     _, _, _, go = _make_go(0.0)
     prior = make_prior()
@@ -122,8 +122,8 @@ def fig_greedy(d: dict, out: Path) -> None:
     )
 
     designs = {
-        "naif (boite noire, GO)": np.asarray(r_naive.design),
-        "batch (reoptimise, GO)": np.asarray(r_batch.design),
+        "naive (black-box, GO)": np.asarray(r_naive.design),
+        "batch (reoptimized, GO)": np.asarray(r_batch.design),
         "schur $O(mp^2)$ (GO)": np.asarray(r_schur.design),
     }
     save(
@@ -136,29 +136,29 @@ def fig_greedy(d: dict, out: Path) -> None:
         for label, W in designs.items()
     }
     save(
-        vd.plot_greedy_comparison(ms, scores, r"$\lambda = 0$, goal-oriented -- EIG QoI exacte"),
+        vd.plot_greedy_comparison(ms, scores, r"$\lambda = 0$, goal-oriented -- exact QoI EIG"),
         out / "16_greedy_scores_go.png",
     )
 
     costs = {
-        "naif": np.array([m * N for m in ms]),
+        "naive": np.array([m * N for m in ms]),
         "batch (~)": np.array([m * N + 3 * N * m * (m + 1) // 2 for m in ms]),
         "schur": np.array([m * N**2 * 1e-6 for m in ms]),
     }
     save(
-        vd.plot_greedy_cost(ms, costs, "evaluations du critere (schur : $p^2$ flops)"),
+        vd.plot_greedy_cost(ms, costs, "criterion evaluations (schur: $p^2$ flops)"),
         out / "17_greedy_cost_go.png",
     )
 
 
 # =============================================================================
-# Calcul + cache
+# Compute + cache
 # =============================================================================
 
 
 def compute(lambda_: float):
-    """``Sigma_signal`` et ``Sigma_Y`` identiques au standard ; ``Sigma_noise``
-    et ``Sigma_Y_given_theta`` refletent la projection sur la QoI.
+    """``Sigma_signal`` and ``Sigma_Y`` identical to the standard case; ``Sigma_noise``
+    and ``Sigma_Y_given_theta`` reflect the projection onto the QoI.
     """
     prior, u = make_prior(), forward(lambda_)
     k_sample, k_sample_yth, k_grad = jr.split(jr.key(0), 3)
@@ -193,7 +193,7 @@ def load(lambda_: float, cache_dir: Path, force: bool) -> dict:
     if path.exists() and not force:
         print(f"  cache  {path.name}")
         return dict(np.load(path))
-    print(f"  calcul lambda={lambda_} (goal-oriented) ...", flush=True)
+    print(f"  computing lambda={lambda_} (goal-oriented) ...", flush=True)
     data = compute(lambda_)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, **data)
@@ -216,7 +216,7 @@ def as_diagnostics(d: dict) -> DiagnosticMatrices:
 
 
 def fig_reconstruction(lambda_: float, design, out: Path) -> None:
-    """Prior, posterieur, ``theta_vrai`` -- restreints a la QoI (premiere moitie)."""
+    """Prior, posterior, ``theta_true`` -- restricted to the QoI (first half)."""
     prior, model, inference, go = _make_go(lambda_)
     k_true, k_noise, k_prior, k_post = jr.split(jr.key(42), 4)
 
@@ -272,11 +272,11 @@ def fig_matrices(lambda_: float, d: dict, out: Path) -> None:
 
 
 def fig_linear_vs_nonlinear(data: dict, out: Path) -> None:
-    """``H(u)`` et spectres -- identiques en substance au cas standard (h-independants).
+    """``H(u)`` and spectra -- identical in substance to the standard case (h-independent).
 
-    Conservee pour le parallelisme avec ``make_figures.py``, pas pour demontrer
-    quoi que ce soit de goal-oriented : ni ``H(u)`` ni ``Sigma_signal`` ne
-    dependent de ``h``.
+    Kept for parallelism with ``make_figures.py``, not to demonstrate
+    anything goal-oriented: neither ``H(u)`` nor ``Sigma_signal`` depends
+    on ``h``.
     """
     lams = sorted(data)
     save(
@@ -300,7 +300,7 @@ def fig_linear_vs_nonlinear(data: dict, out: Path) -> None:
 
 
 def fig_bounds(lambda_: float, d: dict, out: Path):
-    """Deux designs, quatre bornes chacun -- protocole du papier, diagnostics GO."""
+    """Two designs, four bounds each -- paper protocol, GO diagnostics."""
     dg = as_diagnostics(d)
     strategies = {
         "iEIG$\\geq$ (19) GO": (dg.Sigma_signal, dg.Sigma_Y_given_theta),
@@ -320,10 +320,10 @@ def fig_bounds(lambda_: float, d: dict, out: Path):
             rows["cons_low"].append(float(c.lower))
             rows["cons_up"].append(float(c.upper))
         per_strategy[label] = {k: np.array(v) for k, v in rows.items()}
-        widths[f"largeur inc -- {label}"] = (
+        widths[f"width inc -- {label}"] = (
             per_strategy[label]["inc_up"] - per_strategy[label]["inc_low"]
         )
-        widths[f"largeur cons -- {label}"] = (
+        widths[f"width cons -- {label}"] = (
             per_strategy[label]["cons_up"] - per_strategy[label]["cons_low"]
         )
 
@@ -390,7 +390,7 @@ def fig_designs(lambda_: float, d: dict, designs: dict, out: Path) -> None:
             X,
             np.diag(d["Sigma_Y"] - d["Sigma_signal"]),
             designs,
-            title=r"capteurs (GO) et $\mathrm{diag}(\Sigma_Y - \Sigma_{signal})$",
+            title=r"sensors (GO) and $\mathrm{diag}(\Sigma_Y - \Sigma_{signal})$",
         ),
         out / f"13_design_on_gap_go_lambda_{lambda_:.2f}.png",
     )
@@ -404,7 +404,7 @@ def fig_gap_vs_lambda(data: dict, out: Path) -> None:
             lams,
             gaps,
             mc_floor=abs(gaps[0]) if lams[0] == 0.0 else None,
-            title="gap($I_p$) goal-oriented -- non-gaussianite de $Y$ conditionnee a la QoI",
+            title="gap($I_p$) goal-oriented -- non-Gaussianity of $Y$ conditioned on the QoI",
         ),
         out / "14_gap_vs_lambda_go.png",
     )
@@ -426,7 +426,7 @@ def main() -> None:
     use_style()
     out, cache = Path(args.out), Path(args.cache)
 
-    print("Diagnostiques (goal-oriented)")
+    print("Diagnostics (goal-oriented)")
     data = {lam: load(lam, cache, args.force) for lam in args.lambdas}
 
     print("Figures")

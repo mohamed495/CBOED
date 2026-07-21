@@ -6,15 +6,15 @@ from cboed.estimators.base import EIGEstimator
 
 
 class LaplaceEIG(EIGEstimator):
-    """EIG par linéarisation du modèle au point de référence.
+    """EIG via linearization of the model at a reference point.
 
-    Exact in lineare-gaussian. Approximation au premier ordre sinon :
-    le modèle est remplacé par sa tangente au point, et l'EIG gaussienne
-    correspondante est calculée. L'erreur croît avec la non-linéarité.
+    Exact in linear-gaussian. A first-order approximation otherwise:
+    the model is replaced by its tangent at the point, and the corresponding
+    Gaussian EIG is computed. The error grows with the nonlinearity.
 
-    Le point de linéarisation est μ_prior par défaut. Le MAP (point
-    data-dépendant, plus précis) relève de l'optimisation et sera fourni
-    de l'extérieur via estimate_at.
+    The linearization point is mu_prior by default. The MAP (a data-dependent,
+    more accurate point) is an optimization concern and will be supplied
+    externally via estimate_at.
     """
 
     @property
@@ -33,5 +33,5 @@ class LaplaceEIG(EIGEstimator):
         point: Float[Array, " n_param"],
         design: Int[Array, " n_obs"] | None = None,
     ) -> Float[Array, ""]:
-        """EIG linéarisée à un point explicite (ex : MAP fourni par un optimiseur)."""
+        """EIG linearized at an explicit point (e.g. a MAP supplied by an optimizer)."""
         return self.eig.evaluate(point, design)

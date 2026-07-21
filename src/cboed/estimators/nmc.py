@@ -7,10 +7,10 @@ from cboed.estimators.base import EIGEstimator, chunked_vmap
 
 
 class NestedMonteCarloEIG(EIGEstimator):
-    """EIG par Monte-Carlo imbriqué.
+    """EIG via nested Monte Carlo.
 
-    Borne inférieure biaisée (biais en 1/M). Référence pour le non-linéaire.
-    Coût : n_outer x n_inner évaluations de vraisemblance.
+    Biased lower bound (bias in 1/M). Reference for the nonlinear case.
+    Cost: n_outer x n_inner likelihood evaluations.
     """
 
     @property
@@ -31,7 +31,7 @@ class NestedMonteCarloEIG(EIGEstimator):
     ) -> Float[Array, ""]:
         k_theta, k_y, k_inner = jax.random.split(key, 3)
 
-        # boucle externe : θᵢ ~ prior,  yᵢ ~ p(·|θᵢ)
+        # outer loop: θᵢ ~ prior,  yᵢ ~ p(·|θᵢ)
         thetas = self.prior.sample(k_theta, n_outer)  # (N, d)
         keys_y = jax.random.split(k_y, n_outer)
         ys = jax.vmap(lambda th, k: self.likelihood.sample(k, th, design, n_samples=1)[0])(

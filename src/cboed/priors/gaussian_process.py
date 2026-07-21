@@ -1,4 +1,4 @@
-"""Priors gaussiens : processus gaussien + façade inférentielle."""
+"""Gaussian priors: Gaussian process + inferential facade."""
 
 from functools import partial
 
@@ -13,34 +13,35 @@ from cboed.priors.base import KernelBase, Prior
 
 
 class GaussianProcess:
-    r"""Processus gaussien sur une grille 1D.
+    r"""Gaussian process on a 1D grid.
 
-    Dit **d'où vient la covariance** : évalue le noyau sur la grille et
-    stabilise la Gram par un nugget. La façade :class:`GaussianPrior` dit
-    **comment l'utiliser pour inférer** -- ne pas fusionner les deux.
+    States **where the covariance comes from**: evaluates the kernel on the
+    grid and stabilizes the Gram matrix with a nugget. The
+    :class:`GaussianPrior` facade states **how to use it for inference** --
+    do not merge the two.
 
     Parameters
     ----------
     kernel : KernelBase
-        Noyau de covariance.
+        Covariance kernel.
     mu : Float[Array, " n_param"]
-        Moyenne du prior. Sa longueur fixe la taille de la grille.
+        Prior mean. Its length fixes the grid size.
     domain : tuple[float, float], default=(0.0, 1.0)
-        Intervalle spatial.
+        Spatial interval.
     jitter : float, default=1e-8
-        Nugget **relatif** : la diagonale reçoit ``jitter * tr(K)/n``.
+        **Relative** nugget: the diagonal receives ``jitter * tr(K)/n``.
 
     Notes
     -----
-    Le jitter est relatif et non absolu : un nugget absolu ne signifie pas la
-    même chose selon ``sigma``, et disparaît quand la variance du signal est
-    grande. ``tr(K)/n`` vaut ``sigma**2`` pour un noyau stationnaire tout en
-    restant défini pour un noyau qui ne l'est pas.
+    The jitter is relative, not absolute: an absolute nugget does not mean
+    the same thing depending on ``sigma``, and vanishes when the signal
+    variance is large. ``tr(K)/n`` equals ``sigma**2`` for a stationary
+    kernel while remaining well defined for a kernel that is not.
 
-    Ce n'est **pas** qu'une astuce numérique : sur grille fine un noyau RBF est
-    effectivement de rang déficient (décroissance spectrale
-    super-exponentielle), et le nugget porte alors les derniers modes -- il
-    modifie le prior. D'où ``test_jitter_does_not_move_eig``.
+    This is **not** just a numerical trick: on a fine grid an RBF kernel is
+    effectively rank-deficient (super-exponential spectral decay), and the
+    nugget then carries the last modes -- it modifies the prior. Hence
+    ``test_jitter_does_not_move_eig``.
 
     Examples
     --------
@@ -66,7 +67,7 @@ class GaussianProcess:
         self.Sigma = self._build_covariance(self.x)
 
     def _build_covariance(self, x: Float[Array, " n_param"]) -> Float[Array, "n_param n_param"]:
-        """Gram + nugget relatif."""
+        """Gram + relative nugget."""
         K = self.kernel(x, x)
         n = x.shape[0]
         scale = jnp.trace(K) / n
@@ -74,26 +75,26 @@ class GaussianProcess:
 
 
 class GaussianPrior(Prior):
-    r"""Façade inférentielle sur un :class:`GaussianProcess`.
+    r"""Inferential facade over a :class:`GaussianProcess`.
 
-    Factorise ``Gamma_prior`` **une fois** et expose les actions dont
-    l'inférence a besoin. Aucune inversion à la construction : les oracles
-    denses (``Sigma()``, ``hessian()``) sont hérités de :class:`Prior` et
-    matérialisent à la demande.
+    Factorizes ``Gamma_prior`` **once** and exposes the actions inference
+    needs. No inversion at construction: the dense oracles (``Sigma()``,
+    ``hessian()``) are inherited from :class:`Prior` and materialize on
+    demand.
 
     Parameters
     ----------
     prior : GaussianProcess
-        Passé en mot-clé : ``GaussianPrior(prior=gp)``.
+        Passed as a keyword: ``GaussianPrior(prior=gp)``.
     """
 
     def __init__(self, **hyperparameters) -> None:
         self._hyperparameters = hyperparameters
         Sigma = self.prior.Sigma
-        # Unique factorisation : solves *et* échantillonnage en dérivent.
+        # Single factorization: both solves *and* sampling derive from it.
         self._chol = jsp.linalg.cho_factor(Sigma, lower=True)
-        # cho_factor laisse des résidus dans l'autre triangle : tril() rend le
-        # facteur propre attendu par l'échantillonnage.
+        # cho_factor leaves residue in the other triangle: tril() gives the
+        # clean factor expected by sampling.
         self._L = jnp.tril(self._chol[0])
 
     @property
@@ -107,7 +108,7 @@ class GaussianPrior(Prior):
     @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_prior(self, theta: Float[Array, " n_param"]) -> Float[Array, ""]:
-        """Log-densité gaussienne."""
+        """Gaussian log-density."""
         n = theta.shape[0]
         r = theta - self.mu
         quad = r @ jsp.linalg.cho_solve(self._chol, r)
@@ -123,6 +124,7 @@ class GaussianPrior(Prior):
     @jaxtyped(typechecker=beartype)
     def log_det_precision(self) -> Float[Array, ""]:
         """``log det Gamma_prior^{-1} = -2 sum log diag L``."""
+
         return -2.0 * jnp.sum(jnp.log(jnp.diag(self._chol[0])))
 
     @partial(jax.jit, static_argnums=(0,))

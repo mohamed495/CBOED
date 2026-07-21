@@ -9,7 +9,7 @@ class LinearizedOperator:
 
     - matvec(v)  : v -> G v
     - rmatvec(w) : w -> G^T w
-    - T          : opérateur adjoint
+    - T          : adjoint operator
     - shape      : (n_out, n_in)
     """
 

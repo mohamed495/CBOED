@@ -39,25 +39,25 @@ def setup() -> Setup:
 
 
 def test_greedy_selects_monotone_improving(setup):
-    """Le greedy produit des scores croissants."""
+    """Greedy produces increasing scores."""
 
     eig = EIG(inference=setup.inference)
     opt = GreedyOptimizer(criterion=eig)
     result = opt.run(theta=setup.prior.mu, n_sensors=3, n_candidates=4)
 
     assert len(result.design) == 3
-    assert len(set(result.design.tolist())) == 3  # pas de doublon
-    # scores croissants (monotonie de l'EIG)
+    assert len(set(result.design.tolist())) == 3  # no duplicates
+    # increasing scores (monotonicity of EIG)
     assert all(a <= b for a, b in zip(result.scores, result.scores[1:], strict=False))
 
 
 def test_greedy_first_pick_is_argmax(setup):
-    """Le premier capteur est celui de meilleur EIG individuel."""
+    """The first sensor is the one with the best individual EIG."""
 
     eig = EIG(inference=setup.inference)
     theta = setup.prior.mu
 
-    # calcul brut du meilleur capteur seul
+    # brute-force computation of the best single sensor
     singles = [eig.evaluate(theta, jnp.array([i])) for i in range(4)]
     best_single = int(jnp.argmax(jnp.array(singles)))
 
@@ -67,18 +67,18 @@ def test_greedy_first_pick_is_argmax(setup):
 
 
 def test_greedy_close_to_exhaustive(setup):
-    """Sur petit n, greedy vs meilleur design exhaustif."""
+    """On a small n, greedy vs. best exhaustive design."""
     from itertools import combinations
 
     eig = EIG(inference=setup.inference)
     theta = setup.prior.mu
 
-    # exhaustif : meilleur design de taille 2 parmi 4
+    # exhaustive: best design of size 2 out of 4
     best_exhaustive = max(
         eig.evaluate(theta, jnp.array(list(c))) for c in combinations(range(4), 2)
     )
     opt = GreedyOptimizer(criterion=eig)
     greedy = eig.evaluate(theta, opt.run(theta, 2, 4).design)
 
-    # greedy ≥ (1 - 1/e) x optimal (borne de Nemhauser, si sous-modulaire)
+    # greedy >= (1 - 1/e) x optimal (Nemhauser bound, if submodular)
     assert greedy >= 0.63 * best_exhaustive

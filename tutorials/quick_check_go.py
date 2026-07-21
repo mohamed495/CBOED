@@ -1,17 +1,17 @@
-r"""Verification visuelle rapide -- cas goal-oriented, QoI = premiere moitie de theta.
+r"""Quick visual check -- goal-oriented case, QoI = first half of theta.
 
-Meme structure que le test rapide du cas standard (reconstruction + spectre
-log-generalise), mais l'objet d'interet n'est plus le champ entier ``eta``
-(200 points) : c'est ``theta = h(eta) = eta[:n_qoi]``, via
+Same structure as the standard case's quick test (reconstruction + log-
+generalized spectrum), but the object of interest is no longer the entire
+field ``eta`` (200 points): it is ``theta = h(eta) = eta[:n_qoi]``, via
 :class:`cboed.inference.goal_oriented.GoalOrientedModel`.
 
-``Sigma_xi`` (bruit sur ``theta = h(eta) + xi``) est fixe a un jitter non nul
-plutot qu'a zero exact : ``qoi_fisher_moment`` diverge quand ``Sigma_xi -> 0``
-(cf. ``bounds/diagnostics/gradient_based.py``), y compris pour une projection
-et pas seulement pour ``h = identite``.
+``Sigma_xi`` (noise on ``theta = h(eta) + xi``) is fixed to a nonzero jitter
+rather than exactly zero: ``qoi_fisher_moment`` diverges when
+``Sigma_xi -> 0`` (see ``bounds/diagnostics/gradient_based.py``), including
+for a projection and not only for ``h = identity``.
 
-Echantillons reduits (N_SAMPLES, N_GRADIENT) : verification de plomberie, pas
-un resultat de production.
+Reduced sample sizes (N_SAMPLES, N_GRADIENT): plumbing check, not a
+production result.
 """
 
 from pathlib import Path
@@ -37,10 +37,10 @@ OUT = Path(__file__).parent / "figures_go_quick"
 
 LAMBDA = 0.0
 N_QOI = N // 2
-SIGMA_XI = 1e-3 * jnp.eye(N_QOI)  # jitter -- cf. docstring du module
+SIGMA_XI = 1e-3 * jnp.eye(N_QOI)  # jitter -- see the module docstring
 
-N_SAMPLES = 300  # Sigma_Y, Sigma_Y_given_theta (paires MC)
-N_GRADIENT = 60  # Sigma_signal, Sigma_noise (jacobiennes)
+N_SAMPLES = 300  # Sigma_Y, Sigma_Y_given_theta (MC pairs)
+N_GRADIENT = 60  # Sigma_signal, Sigma_noise (Jacobians)
 M_DESIGN = 10
 
 
@@ -51,7 +51,7 @@ def main() -> None:
     prior = make_prior()
     model = make_model(LAMBDA)
     u = forward(LAMBDA)
-    h = lambda eta: eta[:N_QOI]  # noqa: E731 -- projection QoI, premiere moitie
+    h = lambda eta: eta[:N_QOI]  # noqa: E731 -- QoI projection, first half
 
     likelihood = GaussianLikelihood(model=model, Sigma_obs=SIGMA_OBS_MATRIX)
     inference = LinearModel(prior=prior, likelihood=likelihood)
@@ -60,17 +60,17 @@ def main() -> None:
     keys = jr.split(jr.key(0), 7)
     k_grad, k_sampleY, k_sampleYth, k_true, k_noise, k_prior_qoi, k_post_qoi = keys
 
-    # -- design : glouton incremental standard (Sigma_signal du champ entier) --
-    print("[design] Sigma_signal (echelle standard) + greedy_schur...")
+    # -- design: standard incremental greedy (Sigma_signal of the full field) --
+    print("[design] Sigma_signal (standard scale) + greedy_schur...")
     Sigma_signal_std, _ = gradient_diagnostics_standard(
         u, prior, SIGMA_OBS_MATRIX, k_grad, N_GRADIENT
     )
     design = greedy_schur(Sigma_signal_std, SIGMA_OBS_MATRIX, M_DESIGN).design
     n_qoi_sensors = int(jnp.sum(design < N_QOI))
-    print(f"  {n_qoi_sensors}/{M_DESIGN} capteurs tombent dans la QoI (x < 0.5)")
+    print(f"  {n_qoi_sensors}/{M_DESIGN} sensors fall within the QoI (x < 0.5)")
 
-    # -- reconstruction QoI : theta = h(eta), prior/posterior/verite --------
-    print("[reconstruction QoI]")
+    # -- QoI reconstruction: theta = h(eta), prior/posterior/truth --------
+    print("[QoI reconstruction]")
     theta_true = prior.sample(k_true, 1)[0]
     y = model(theta_true, design) + jr.normal(k_noise, (len(design),)) * jnp.sqrt(
         jnp.diag(SIGMA_OBS_MATRIX)[design]
@@ -100,8 +100,8 @@ def main() -> None:
         OUT / "01_reconstruction_qoi.png",
     )
 
-    # -- spectre log-generalise, diagnostiques goal-oriented -----------------
-    print("[diagnostiques GO] Sigma_signal, Sigma_noise, Sigma_Y, Sigma_Y_given_theta...")
+    # -- log-generalized spectrum, goal-oriented diagnostics -----------------
+    print("[GO diagnostics] Sigma_signal, Sigma_noise, Sigma_Y, Sigma_Y_given_theta...")
     Sigma_signal_go, Sigma_noise_go = gradient_diagnostics(
         u, h, prior, SIGMA_OBS_MATRIX, SIGMA_XI, k_grad, N_GRADIENT
     )
@@ -121,7 +121,7 @@ def main() -> None:
     q = quasi_optimality(dg)
     n_below_one = int(jnp.sum(q.alpha < 1.0 - 1e-6) + jnp.sum(q.beta < 1.0 - 1e-6))
     if n_below_one:
-        print(f"  attention : {n_below_one} valeurs propres < 1 (Prop. 1 les exige >= 1)")
+        print(f"  warning: {n_below_one} eigenvalues < 1 (Prop. 1 requires them >= 1)")
 
     save(
         vs.plot_log_generalized_spectrum(

@@ -1,28 +1,29 @@
-r"""Greedy par compléments de Schur -- ``O(n_sensors * p²)``.
+r"""Greedy via Schur complements -- ``O(n_sensors * p²)``.
 
-Sélection gloutonne du design maximisant un quotient de Rayleigh généralisé
+Greedy selection of the design maximizing a generalized Rayleigh quotient
 
 .. math::
     \tfrac12 \ln \frac{|W_m^T A\, W_m|}{|W_m^T B\, W_m|}
 
-où ``(A, B)`` est un couple de matrices SDP en espace observation. Le module ne
-sait pas d'où elles viennent : ``(Sigma_signal, Sigma_Y_given_theta)`` donne la
-borne inférieure incrémentale (19), ``(Sigma_Y, Sigma_noise)`` la borne inférieure
-conservative (20).
+where ``(A, B)`` is a pair of SDP matrices in observation space. The module
+does not know where they come from: ``(Sigma_signal, Sigma_Y_given_theta)``
+gives the incremental lower bound (19), ``(Sigma_Y, Sigma_noise)`` the
+conservative lower bound (20).
 
-Pourquoi c'est tractable
-------------------------
-Le greedy générique (``optim/greedy.py``) évalue le critère en boîte noire :
-``n_candidates * n_sensors`` appels, chacun refactorisant ``Gamma_post^{-1}``. Ici :
+Why this is tractable
+----------------------
+The generic greedy (``optim/greedy.py``) evaluates the criterion as a black
+box: ``n_candidates * n_sensors`` calls, each refactorizing
+``Gamma_post^{-1}``. Here:
 
-* le gain marginal d'un candidat est un **rapport de deux entrées diagonales** des
-  matrices conditionnées -- ``O(1)`` par candidat ;
-* l'ajout d'un capteur est un **update rank-1** des deux matrices -- ``O(p²)``.
+* the marginal gain of a candidate is a **ratio of two diagonal entries** of
+  the conditioned matrices -- ``O(1)`` per candidate;
+* adding a sensor is a **rank-1 update** of the two matrices -- ``O(p²)``.
 
-Aucune factorisation, aucun appel au modèle direct : tout le coût du modèle est déjà
-payé, une fois, dans la construction de ``A`` et ``B``.
+No factorization, no call to the forward model: the whole cost of the model
+is already paid, once, when building ``A`` and ``B``.
 
-⚠️ ``optim/greedy.py`` reste l'**oracle** de ce module. Ne pas le supprimer.
+Warning: ``optim/greedy.py`` remains the **oracle** for this module. Do not remove it.
 """
 
 import jax
@@ -41,39 +42,40 @@ def greedy_schur(
     Sigma_den: Float[Array, "n_obs n_obs"],
     n_sensors: int,
 ) -> Result:
-    r"""Design glouton maximisant ``½ ln |W^T A W| / |W^T B W|``.
+    r"""Greedy design maximizing ``½ ln |W^T A W| / |W^T B W|``.
 
     Parameters
     ----------
     Sigma_num, Sigma_den : Float[Array, "n_obs n_obs"]
-        Numérateur ``A`` et dénominateur ``B``, SDP, **non conditionnées**.
-        Incrémental : ``(Sigma_signal, Sigma_Y_given_theta)``.
-        Conservatif : ``(Sigma_Y, Sigma_noise)``.
+        Numerator ``A`` and denominator ``B``, SDP, **unconditioned**.
+        Incremental: ``(Sigma_signal, Sigma_Y_given_theta)``.
+        Conservative: ``(Sigma_Y, Sigma_noise)``.
     n_sensors : int
-        Budget. Doit valoir au plus ``n_obs``.
+        Budget. Must be at most ``n_obs``.
 
     Returns
     -------
     Result
-        ``design`` : indices dans l'ordre d'ajout.
-        ``scores`` : valeur **cumulée** du quotient après chaque ajout -- cf. Notes.
+        ``design``: indices in the order added.
+        ``scores``: **cumulative** value of the quotient after each addition -- see Notes.
 
     Notes
     -----
-    **Les scores télescopent.** Le gain marginal vaut
-    ``log_ratio(S U {j}) - log_ratio(S)``, et ``log_ratio(∅) = 0`` ; la somme
-    cumulée des gains est donc **exactement** ``log_ratio(S_k)`` à chaque étape.
-    C'est ce qui rend ``scores`` comparable à celui de ``GreedyOptimizer``, dont le
-    contrat est « score du critère après chaque ajout », et non un gain marginal.
+    **The scores telescope.** The marginal gain equals
+    ``log_ratio(S U {j}) - log_ratio(S)``, and ``log_ratio(∅) = 0``; the
+    cumulative sum of the gains is therefore **exactly** ``log_ratio(S_k)`` at
+    each step. This is what makes ``scores`` comparable to that of
+    ``GreedyOptimizer``, whose contract is "criterion score after each
+    addition", not a marginal gain.
 
-    Ce n'est pas un détail d'implémentation : le télescopage **est** la
-    décomposition incrémentale du théorème 2.1, et la borne inférieure du
-    corollaire 1 se lit directement dans ``scores[-1]``.
+    This is not an implementation detail: the telescoping **is** the
+    incremental decomposition of Theorem 2.1, and the lower bound of
+    Corollary 1 can be read directly off ``scores[-1]``.
 
-    ⚠️ Pas de ``jit`` autour de la boucle : ``argmax`` rend un indice qui pilote un
-    ``schur_update``, donc une valeur statique. Le greedy discret n'est de toute
-    façon pas différentiable -- le design paramètre l'opérateur, il n'entre jamais
-    dans ``jax.grad``.
+    Warning: no ``jit`` around the loop: ``argmax`` returns an index that
+    drives a ``schur_update``, hence a static value. The discrete greedy is
+    not differentiable anyway -- the design parameterizes the operator, it
+    never enters ``jax.grad``.
     """
     p = Sigma_num.shape[0]
     if not 0 < n_sensors <= p:
@@ -105,10 +107,10 @@ def log_ratio(
     Sigma_den: Float[Array, "n_obs n_obs"],
     design: Array,
 ) -> Float[Array, ""]:
-    r"""``½ ln |W^T A W| / |W^T B W|`` évalué à plat.
+    r"""``½ ln |W^T A W| / |W^T B W|`` evaluated directly.
 
-    Chemin indépendant de :func:`greedy_schur` : sous-matrices et ``slogdet``,
-    aucun complément de Schur. C'est l'oracle des ``scores``.
+    Path independent of :func:`greedy_schur`: submatrices and ``slogdet``,
+    no Schur complement. This is the oracle for ``scores``.
     """
     ix = jnp.ix_(design, design)
     _, ln = jnp.linalg.slogdet(Sigma_num[ix])

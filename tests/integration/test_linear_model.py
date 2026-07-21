@@ -39,21 +39,21 @@ def setup() -> Setup:
 
 def test_cov_is_symmetric_pd(setup):
     cov = setup.inference._cov(theta=setup.prior.mu)
-    assert jnp.allclose(cov, cov.T)  # symétrique
-    assert jnp.all(jnp.linalg.eigvalsh(cov) > 0)  # définie positive
+    assert jnp.allclose(cov, cov.T)  # symmetric
+    assert jnp.all(jnp.linalg.eigvalsh(cov) > 0)  # positive definite
 
 
 def test_posterior_less_than_prior(setup):
-    """Observed reduce incertainty : Γ_post ⪯ Γ_prior."""
+    """Observed reduce incertainty: Γ_post ⪯ Γ_prior."""
     cov_post = setup.inference._cov(theta=setup.prior.mu)
     cov_prior = setup.prior.Sigma
-    # Γ_prior - Γ_post doit être semi-définie positive
+    # Γ_prior - Γ_post must be positive semidefinite
     diff = cov_prior - cov_post
     assert jnp.all(jnp.linalg.eigvalsh(diff) > -1e-8)
 
 
 def test_hessian_depends_on_design(setup):
-    """Deux designs différents → Hessiennes différentes."""
+    """Two different designs -> different Hessians."""
     theta = setup.prior.mu
     H_a = setup.likelihood.hessian(theta, design=jnp.array([0, 1]))
     H_b = setup.likelihood.hessian(theta, design=jnp.array([2, 3]))
@@ -61,24 +61,24 @@ def test_hessian_depends_on_design(setup):
 
 
 def test_more_sensors_more_information(setup):
-    """Ajouter un capteur augmente l'information (Loewner)."""
+    """Adding a sensor increases information (Loewner order)."""
     theta = setup.prior.mu
     prec_1 = setup.inference.posterior_precision(theta, design=jnp.array([0]))
     prec_2 = setup.inference.posterior_precision(theta, design=jnp.array([0, 1]))
-    # prec_2 ⪰ prec_1 : la précision ne peut qu'augmenter
+    # prec_2 ⪰ prec_1: precision can only increase
     diff = prec_2 - prec_1
     assert jnp.all(jnp.linalg.eigvalsh(diff) > -1e-8)
 
 
 def test_posterior_mean_recovers_truth_noiseless(setup):
-    """Sans bruit, prior faible : μ_post proche de θ_vrai."""
+    """Without noise, weak prior: μ_post close to θ_true."""
     theta_true = jnp.arange(1.0, setup.model.n + 1)
-    y = setup.model(theta_true)  # pas de bruit
+    y = setup.model(theta_true)  # no noise
     mu_post = setup.inference._mu(y=y, theta=setup.prior.mu)
-    # avec ce prior, μ_post tiré entre θ_true et μ_prior
-    # test faible : au moins dans le bon voisinage
+    # with this prior, μ_post falls between θ_true and μ_prior
+    # weak test: at least in the right neighborhood
     assert mu_post.shape == (setup.model.n,)
-    # oracle dense
+    # dense oracle
     A = setup.model.jacobian(setup.prior.mu)
     So, Sp = setup.likelihood.Sigma_obs, setup.prior.Sigma
     prec = A.T @ jnp.linalg.inv(So) @ A + jnp.linalg.inv(Sp)
@@ -89,7 +89,7 @@ def test_posterior_mean_recovers_truth_noiseless(setup):
 
 
 def test_cov_with_anisotropic_noise():
-    """Oracle avec Σ_obs non triviale — discrimine les erreurs que I masque."""
+    """Oracle with nontrivial Σ_obs -- catches errors that I would mask."""
     model = AdvectionDiffusion(diffusivity=0.0, velocity=2.0, T=1.0, domain=[0, 1], nt=5, n=4)
     prior_gp = GaussianProcess(kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(4))
     Sigma_obs = jnp.diag(jnp.array([1.0, 2.0, 3.0, 4.0]))
@@ -104,7 +104,7 @@ def test_cov_with_anisotropic_noise():
 
 
 def test_cov_computed_from_model(setup):
-    # Sigma_obs non triviale : sinon inv(I)=I masque les erreurs
+    # Sigma_obs nontrivial: otherwise inv(I)=I would mask errors
     theta = setup.prior.mu
     computed = setup.inference._cov(theta=theta)
 
@@ -124,10 +124,10 @@ def test_mu(setup: Setup) -> None:
 
     theta_true = jnp.array([0.5, -1.0, 2.0, 0.2])
 
-    # observations sans bruit
+    # noise-free observations
     y = setup.model(theta_true)
 
-    # point de linéarisation
+    # linearization point
     theta_lin = jnp.zeros_like(theta_true)
 
     mu = setup.inference._mu(
@@ -135,7 +135,7 @@ def test_mu(setup: Setup) -> None:
         theta=theta_lin,
     )
 
-    # formule analytique
+    # analytic formula
     H = setup.inference.posterior_precision(theta_lin)
 
     grad_post = setup.likelihood.grad_log_likelihood(

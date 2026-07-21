@@ -1,9 +1,9 @@
-r"""Visualisation des designs optimaux (positions de capteurs).
+r"""Visualization of optimal designs (sensor positions).
 
-Pour λ=0.0, compare :
-  - Design greedy (ajouter capteurs un par un, minimiser gap incrémental)
-  - Design uniforme (espacement régulier)
-  - Design aléatoire
+For λ=0.0, compares:
+  - Greedy design (add sensors one by one, minimize incremental gap)
+  - Uniform design (regular spacing)
+  - Random design
 """
 
 from pathlib import Path
@@ -17,9 +17,9 @@ from cboed.viz.style import COLORS, save, use_style
 
 
 def compute_greedy_design(prior, model, Sigma_obs, m):
-    """Design greedy : sélectionner m capteurs minimisant le gap incrémental.
+    """Greedy design: select m sensors minimizing the incremental gap.
 
-    Simplifié : greedy basique (ajouter le capteur minimisant le gap max).
+    Simplified: basic greedy (add the sensor minimizing the max gap).
     """
     J = model.jacobian(prior.mu, None)
     n_obs = J.shape[0]
@@ -28,7 +28,7 @@ def compute_greedy_design(prior, model, Sigma_obs, m):
     remaining = list(range(n_obs))
 
     for step in range(m):
-        best_idx = remaining[0]  # Placeholder : pour l'instant, juste le premier
+        best_idx = remaining[0]  # Placeholder: for now, just the first one
         selected.append(best_idx)
         remaining.remove(best_idx)
 
@@ -36,23 +36,23 @@ def compute_greedy_design(prior, model, Sigma_obs, m):
 
 
 def uniform_design(n_obs, m):
-    """Design uniforme : espacement régulier."""
+    """Uniform design: regular spacing."""
     return jnp.linspace(0, n_obs - 1, m, dtype=int)
 
 
 def random_design(n_obs, m, key):
-    """Design aléatoire : m capteurs tirés au hasard."""
+    """Random design: m sensors drawn at random."""
     return jr.choice(key, n_obs, shape=(m,), replace=False)
 
 
 def main():
-    """Pipeline designs pour λ=0.0."""
+    """Designs pipeline for λ=0.0."""
     use_style()
     output_dir = Path("outputs/designs")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
-    print("Designs optimaux | λ = 0.0")
+    print("Optimal designs | λ = 0.0")
     print("=" * 70)
 
     # -----------------------------------------------------------------------
@@ -63,7 +63,7 @@ def main():
     model = make_model(lambda_)
     n_obs = model.n
 
-    print(f"\n[Setup] λ = {lambda_:.2f}, n = {n_obs} capteurs possibles")
+    print(f"\n[Setup] λ = {lambda_:.2f}, n = {n_obs} possible sensors")
 
     m_budgets = [5, 10, 15, 20, 25]
 
@@ -86,7 +86,7 @@ def main():
     # -----------------------------------------------------------------------
     print("\n[Figures]")
 
-    # Figure 1 : Comparaison des 3 designs pour m=10
+    # Figure 1: Comparison of the 3 designs for m=10
     m = 10
     greedy = compute_greedy_design(prior, model, SIGMA_OBS_MATRIX, m)
     uniform = uniform_design(n_obs, m)
@@ -94,12 +94,12 @@ def main():
 
     fig1, ax = plt.subplots(figsize=(10, 3))
 
-    # Afficher tous les capteurs possibles
+    # Show all possible sensors
     ax.scatter(
-        range(n_obs), [1] * n_obs, alpha=0.1, s=10, color="gray", label="capteurs disponibles"
+        range(n_obs), [1] * n_obs, alpha=0.1, s=10, color="gray", label="available sensors"
     )
 
-    # Designs sélectionnés
+    # Selected designs
     ax.scatter(
         greedy,
         [1.15] * len(greedy),
@@ -115,7 +115,7 @@ def main():
         s=100,
         marker="s",
         color=COLORS["conservative"],
-        label=f"Uniforme (m={m})",
+        label=f"Uniform (m={m})",
         zorder=4,
     )
     ax.scatter(
@@ -124,22 +124,22 @@ def main():
         s=100,
         marker="^",
         color=COLORS["Sigma_signal"],
-        label=f"Aléatoire (m={m})",
+        label=f"Random (m={m})",
         zorder=3,
     )
 
     ax.set_xlim(-5, n_obs + 5)
     ax.set_ylim(0.95, 1.25)
-    ax.set_xlabel("Position x (domaine [0, 1])")
+    ax.set_xlabel("Position x (domain [0, 1])")
     ax.set_ylabel("")
-    ax.set_title(f"Positions des capteurs | λ = 0.0, m = {m}")
+    ax.set_title(f"Sensor positions | λ = 0.0, m = {m}")
     ax.legend(fontsize=9, loc="upper right")
     ax.set_yticks([])
     fig1.tight_layout()
     path1 = save(fig1, output_dir / "01_designs_comparison.png")
     print(f"  → {path1.name}")
 
-    # Figure 2 : Designs en fonction de m (greedy)
+    # Figure 2: Designs as a function of m (greedy)
     fig2, ax = plt.subplots(figsize=(10, 4))
 
     for i, m in enumerate(m_budgets):
@@ -150,9 +150,9 @@ def main():
 
     ax.set_xlim(-20, n_obs + 5)
     ax.set_ylim(-0.5, len(m_budgets) - 0.5)
-    ax.set_xlabel("Position x (domaine [0, 1])")
+    ax.set_xlabel("Position x (domain [0, 1])")
     ax.set_ylabel("")
-    ax.set_title("Designs greedy en fonction du budget | λ = 0.0")
+    ax.set_title("Greedy designs as a function of the budget | λ = 0.0")
     ax.set_yticks([])
     ax.grid(True, alpha=0.2, axis="x")
     fig2.tight_layout()
@@ -160,11 +160,11 @@ def main():
     print(f"  → {path2.name}")
 
     # -----------------------------------------------------------------------
-    # 4. Résumé
+    # 4. Summary
     # -----------------------------------------------------------------------
-    print("\n[Résumé]")
-    print(f"  Designs tracés pour m ∈ {m_budgets}")
-    print(f"  Figures sauvegardées dans : {output_dir.resolve()}")
+    print("\n[Summary]")
+    print(f"  Designs plotted for m ∈ {m_budgets}")
+    print(f"  Figures saved to: {output_dir.resolve()}")
     print("=" * 70)
 
 

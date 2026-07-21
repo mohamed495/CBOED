@@ -1,19 +1,20 @@
-r"""Débruiteurs pour §3.2 -- l'espace d'approximation ``F``.
+r"""Denoisers for §3.2 -- the approximation space ``F``.
 
-Prop. 3 exige que ``F`` contienne les fonctions affines. On construit donc les
-débruiteurs par **somme** :
+Prop. 3 requires that ``F`` contain the affine functions. We therefore build
+denoisers as a **sum**:
 
-    f(Y) = affine(Y) + reseau(Y)
-           |            |
-           forme fermee  apprend le residu non lineaire
+    f(Y) = affine(Y) + network(Y)
+           |               |
+           closed form     learns the non-linear residual
 
-L'affine capture toute la partie linéaire (exact à ``lambda = 0``, où ``E[u|Y]`` est
-affine) ; le réseau ne corrige que ce que l'affine rate. Un réseau partant de zéro
-convergerait bien plus lentement -- même principe que le préconditionnement : résoudre
-la partie facile exactement, ne laisser au solveur que le reste.
+The affine part captures the entire linear component (exact at
+``lambda = 0``, where ``E[u|Y]`` is affine); the network only corrects what
+the affine part misses. A network starting from scratch would converge much
+more slowly -- the same idea as preconditioning: solve the easy part exactly,
+leave only the rest to the solver.
 
-Tous les débruiteurs sont des modules ``equinox`` -- des pytrees JAX, donc ``jit`` /
-``grad`` / ``vmap`` s'appliquent directement.
+All denoisers are ``equinox`` modules -- JAX pytrees, so ``jit`` / ``grad`` /
+``vmap`` apply directly.
 """
 
 from typing import Protocol, runtime_checkable
@@ -28,23 +29,23 @@ from jaxtyping import Array, Float, PRNGKeyArray
 
 @runtime_checkable
 class Denoiser(Protocol):
-    """Une approximation ``f`` de ``E[u|features]``. ``features`` = ``Y`` (pour ``f``)
-    ou ``(Y, theta)`` concaténés (pour ``g``).
+    """An approximation ``f`` of ``E[u|features]``. ``features`` = ``Y`` (for ``f``)
+    or ``(Y, theta)`` concatenated (for ``g``).
     """
 
     def __call__(self, features: Float[Array, " n_feat"]) -> Float[Array, " n_obs"]: ...
 
 
 # =============================================================================
-# Affine -- forme fermee, le plancher de Prop. 3
+# Affine -- closed form, the floor of Prop. 3
 # =============================================================================
 
 
 class AffineDenoiser(eqx.Module):
-    r"""``f(Y) = A Y + b`` -- moindres carrés en forme fermée.
+    r"""``f(Y) = A Y + b`` -- least squares in closed form.
 
-    ``A = Cov(u, Y) Cov(Y)^{-1}``, ``b = E[u] - A E[Y]``. Exact quand ``E[u|Y]`` est
-    affine, c'est-à-dire à ``lambda = 0``.
+    ``A = Cov(u, Y) Cov(Y)^{-1}``, ``b = E[u] - A E[Y]``. Exact when ``E[u|Y]``
+    is affine, i.e. at ``lambda = 0``.
     """
 
     A: Float[Array, "n_obs n_feat"]
@@ -59,7 +60,7 @@ class AffineDenoiser(eqx.Module):
         u_samples: Float[Array, "n_samples n_obs"],
         features: Float[Array, "n_samples n_feat"],
     ) -> "AffineDenoiser":
-        """Régression sur les paires déjà tirées pour ``Sigma_Y`` -- coût marginal nul."""
+        """Regression on the pairs already drawn for ``Sigma_Y`` -- zero marginal cost."""
         n = u_samples.shape[0]
         u_bar, f_bar = u_samples.mean(0), features.mean(0)
         U, Fc = u_samples - u_bar, features - f_bar
@@ -72,12 +73,12 @@ class AffineDenoiser(eqx.Module):
 
 
 # =============================================================================
-# Residuel -- affine + reseau
+# Residual -- affine + network
 # =============================================================================
 
 
 class _MLP(eqx.Module):
-    """MLP simple, sortie initialisée à zéro pour que le résidu parte de ``0``."""
+    """Simple MLP, output initialized to zero so the residual starts at ``0``."""
 
     layers: list
 
@@ -87,7 +88,7 @@ class _MLP(eqx.Module):
         self.layers = [
             eqx.nn.Linear(a, b, key=k) for a, b, k in zip(sizes[:-1], sizes[1:], keys, strict=True)
         ]
-        # derniere couche a zero : NN(Y) = 0 au depart, l'affine domine
+        # last layer at zero: NN(Y) = 0 at the start, the affine part dominates
         last = self.layers[-1]
         self.layers[-1] = eqx.tree_at(
             lambda m: (m.weight, m.bias),
@@ -102,13 +103,14 @@ class _MLP(eqx.Module):
 
 
 class ResidualDenoiser(eqx.Module):
-    r"""``f(Y) = affine(Y) + net(Y)`` -- affine figé, réseau appris sur le résidu.
+    r"""``f(Y) = affine(Y) + net(Y)`` -- affine frozen, network learned on the residual.
 
-    L'affine est ``fit`` en forme fermée puis **gelé** : le réseau apprend
-    ``u - affine(Y)``, qui est ``~0`` à ``lambda = 0`` et petit à ``lambda`` modéré.
+    The affine part is ``fit`` in closed form then **frozen**: the network
+    learns ``u - affine(Y)``, which is ``~0`` at ``lambda = 0`` and small at
+    moderate ``lambda``.
 
-    ``F`` contient les affines par construction (``net`` initialisé à zéro), donc
-    Prop. 3 s'applique.
+    ``F`` contains the affines by construction (``net`` initialized to zero),
+    so Prop. 3 applies.
     """
 
     affine: AffineDenoiser
@@ -128,15 +130,15 @@ class ResidualDenoiser(eqx.Module):
         steps: int = 2000,
         lr: float = 1e-3,
     ) -> "ResidualDenoiser":
-        """Affine en forme fermée, puis ``steps`` pas d'Adam sur le résidu.
+        """Affine in closed form, then ``steps`` Adam steps on the residual.
 
-        Pas de validation ni d'early-stopping : le module reste simple, le script
-        décide ``steps``. ``width = 0`` -> ``2 * n_obs``.
+        No validation or early stopping: the module stays simple, the script
+        decides ``steps``. ``width = 0`` -> ``2 * n_obs``.
         """
         n_feat, n_obs = features.shape[1], u_samples.shape[1]
         width = width or 2 * n_obs
         affine = AffineDenoiser.fit(u_samples, features)
-        target = u_samples - jax.vmap(affine)(features)  # le residu a apprendre
+        target = u_samples - jax.vmap(affine)(features)  # residual to learn
 
         net = _MLP(n_feat, n_obs, width, depth, key)
         opt = optax.adam(lr)

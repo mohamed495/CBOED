@@ -1,4 +1,4 @@
-"""Postérieure linéaire-gaussienne."""
+"""Linear-Gaussian posterior."""
 
 from functools import partial
 
@@ -15,12 +15,12 @@ from cboed.priors.base import Prior
 
 
 class LinearModel(InferenceModel):
-    r"""Postérieure gaussienne par linéarisation.
+    r"""Gaussian posterior via linearization.
 
     .. math::
         \Gamma_{post}^{-1} = \Gamma_{prior}^{-1} + J^T \Sigma_{obs}^{-1} J
 
-    Exacte si le modèle direct est linéaire ; approximation de Laplace sinon.
+    Exact if the forward model is linear; a Laplace approximation otherwise.
     """
 
     def __init__(self, **hyperparameters) -> None:
@@ -34,7 +34,7 @@ class LinearModel(InferenceModel):
     def likelihood(self) -> Likelihood:
         return self._hyperparameters["likelihood"]
 
-    # -- précision et factorisation ---------------------------------------
+    # -- precision and factorization ---------------------------------------
 
     @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
@@ -45,12 +45,12 @@ class LinearModel(InferenceModel):
     ) -> Float[Array, "n_param n_param"]:
         r"""``Gamma_post^{-1}``, dense.
 
-        Le signe ``-`` global transforme la somme de deux Hessiennes
-        **négatives** en précision **positive** : c'est lui qui garantit que
-        ``cho_factor`` reçoit une SDP.
+        The global ``-`` sign turns the sum of two **negative** Hessians into
+        a **positive** precision: it is what guarantees that ``cho_factor``
+        receives an SPD matrix.
 
-        Hors contrat : dense assumé. En haute dimension, cette somme devient un
-        opérateur.
+        Outside the contract: dense is assumed here. In high dimension, this
+        sum becomes an operator.
         """
         return -(self.prior.hessian() + self.likelihood.hessian(theta=theta, design=design))
 
@@ -60,13 +60,13 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> tuple[Float[Array, "n_param n_param"], bool]:
-        """Factorisation partagée. `y`-indépendante : hissable hors des boucles.
+        """Shared factorization. ``y``-independent: hoistable out of loops.
 
-        ⚠️ Pas de ``jit`` ici : la sortie de ``cho_factor`` contient un ``bool``
-        (``lower``), et jit re-boxe les sorties scalaires en ``jax.Array`` --
-        ``cho_solve`` en aval a besoin d'un ``bool`` Python concret pour son
-        propre ``static_argnames``. Inlinee sans probleme dans les methodes
-        jittees qui l'appellent (meme mecanisme que ``_obs_chol`` dans
+        Warning: no ``jit`` here: the output of ``cho_factor`` contains a
+        ``bool`` (``lower``), and jit reboxes scalar outputs as ``jax.Array``
+        -- the downstream ``cho_solve`` needs a concrete Python ``bool`` for
+        its own ``static_argnames``. Inlines without issue into the jitted
+        methods that call it (the same mechanism as ``_obs_chol`` in
         ``GaussianLikelihood``).
         """
         return jsp.linalg.cho_factor(self.posterior_precision(theta, design), lower=True)
@@ -96,14 +96,14 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param k"]:
-        r"""``Gamma_post @ B`` : un ``cho_solve`` sur les k colonnes.
+        r"""``Gamma_post @ B``: a single ``cho_solve`` on the k columns.
 
-        ``O(d^2 k)`` -- au lieu de matérialiser ``Gamma_post`` en ``O(d^3)``
-        pour ensuite n'en projeter que k directions.
+        ``O(d^2 k)`` -- instead of materializing ``Gamma_post`` in ``O(d^3)``
+        only to then project onto k directions.
         """
         return jsp.linalg.cho_solve(self._posterior_chol(theta, design), B)
 
-    # -- moyenne postérieure (dépend de y) --------------------------------
+    # -- posterior mean (depends on y) -------------------------------------
 
     @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
@@ -138,10 +138,10 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param n_param"]:
-        """``Gamma_post`` dense -- oracle de test, cas ``B = I``.
+        """``Gamma_post`` dense -- test oracle, the ``B = I`` case.
 
-        Interdite en haute dimension. Ne rien en faire dépendre : passer par
-        :meth:`posterior_cov_matmul`.
+        Forbidden in high dimension. Do not make anything depend on it: go
+        through :meth:`posterior_cov_matmul` instead.
         """
         n = theta.shape[0]
         return self.posterior_cov_matmul(jnp.eye(n, dtype=theta.dtype), theta, design)
@@ -156,7 +156,7 @@ class LinearModel(InferenceModel):
         design: Int[Array, " n_sensors"] | None = None,
         n_samples: int = 1,
     ) -> Float[Array, "n_samples n_param"]:
-        """Échantillons de la postérieure gaussienne."""
+        """Samples from the Gaussian posterior."""
 
         mean = self._mu(y, theta, design)
 

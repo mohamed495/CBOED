@@ -1,10 +1,10 @@
-"""Greedy Schur contre force brute.
+"""Greedy Schur against brute force.
 
-Deux oracles indépendants :
-* le greedy naïf, qui rescanne tous les candidats en recalculant `slogdet` à plat ;
-* `log_ratio`, qui évalue le quotient sans jamais toucher un complément de Schur.
+Two independent oracles:
+* the naive greedy, which rescans all candidates and recomputes `slogdet` from scratch;
+* `log_ratio`, which evaluates the ratio without ever touching a Schur complement.
 
-Aucun des deux n'emprunte le chemin testé.
+Neither one takes the code path under test.
 """
 
 from itertools import pairwise
@@ -18,7 +18,7 @@ from cboed.optim.greedy_schur import greedy_schur, log_ratio
 
 @pytest.fixture
 def pair():
-    """Deux SDP distinctes et non triviales (A != B, ni l'une ni l'autre = I)."""
+    """Two distinct, nontrivial SPD matrices (A != B, neither equal to I)."""
     k1, k2 = jr.split(jr.key(1))
     p = 8
     X = jr.normal(k1, (p, p))
@@ -29,7 +29,7 @@ def pair():
 
 
 def _greedy_bruteforce(A, B, n_sensors):
-    """Oracle : rescanne tout, recalcule `slogdet` à plat, aucun Schur."""
+    """Oracle: rescans everything, recomputes `slogdet` from scratch, no Schur."""
     selected: list[int] = []
     for _ in range(n_sensors):
         best_j, best = None, -jnp.inf
@@ -45,14 +45,14 @@ def _greedy_bruteforce(A, B, n_sensors):
 
 @pytest.mark.parametrize("n_sensors", [1, 3, 5])
 def test_matches_bruteforce_greedy(pair, n_sensors):
-    """LE test : même design que le greedy à plat."""
+    """THE test: same design as the flat greedy."""
     A, B = pair
     result = greedy_schur(A, B, n_sensors)
     assert list(result.design) == _greedy_bruteforce(A, B, n_sensors)
 
 
 def test_scores_telescope(pair):
-    """scores[k] == log_ratio(design[:k+1]) -- la somme des gains télescope."""
+    """scores[k] == log_ratio(design[:k+1]) -- the sum of gains telescopes."""
     A, B = pair
     result = greedy_schur(A, B, 4)
     for k in range(4):
@@ -61,7 +61,7 @@ def test_scores_telescope(pair):
 
 
 def test_no_sensor_selected_twice(pair):
-    """Sans masque, une diagonale ~1e-16 sur ~1e-16 rendrait un gain fini."""
+    """Without a mask, a ~1e-16 diagonal entry over ~1e-16 would give a finite gain."""
     A, B = pair
     design = greedy_schur(A, B, 6).design
     assert len(jnp.unique(design)) == 6

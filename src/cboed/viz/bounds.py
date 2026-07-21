@@ -1,16 +1,16 @@
-r"""Les bornes en fonction du budget.
+r"""Bounds as a function of budget.
 
-⚠️ **Piège de direction.** Le même couple ``(A, B)`` donne des bornes **opposées**
-selon la stratégie :
+⚠️ **Direction trap.** The same pair ``(A, B)`` gives **opposite** bounds
+depending on the strategy:
 
 ===============================  ==========================  ==================
                                  ``(signal, Y|theta)``       ``(Y, noise)``
 ===============================  ==========================  ==================
-**Incrémental** (Cor. 1)         borne **INF** (15)          borne **SUP** (16)
-**Conservatif** (Cor. 2)         borne **SUP** (18)          borne **INF** (17)
+**Incremental** (Cor. 1)         **LOWER** bound (15)         **UPPER** bound (16)
+**Conservative** (Cor. 2)        **UPPER** bound (18)         **LOWER** bound (17)
 ===============================  ==========================  ==================
 
-Les légendes encodent donc les deux axes -- jamais ``lb``/``ub`` seuls.
+Legends therefore encode both axes -- never ``lb``/``ub`` alone.
 """
 
 import matplotlib.pyplot as plt
@@ -32,21 +32,21 @@ def plot_bounds_vs_m(
     ax=None,
     title="",
 ):
-    """Encadrements en fonction de ``m``.
+    """Bounds as a function of ``m``.
 
     Parameters
     ----------
     ms : (M,)
-        Budgets. Les bornes se calculent à tout ``m`` sans surcoût (le greedy
-        télescope) : tracer une courbe continue, pas cinq points.
+        Budgets. The bounds can be computed at any ``m`` at no extra cost (the
+        greedy telescopes): plot a continuous curve, not five points.
     inc_low, inc_up : (M,)
-        Encadrement incrémental (Cor. 1).
+        Incremental bounds (Cor. 1).
     cons_low, cons_up : (M,) or None
-        Encadrement conservatif (Cor. 2).
+        Conservative bounds (Cor. 2).
     mc : (R, K) or None
-        ``R`` répétitions d'un estimateur MC aux budgets ``mc_ms`` -- boîtes.
+        ``R`` repetitions of an MC estimator at budgets ``mc_ms`` -- boxplots.
     truth : (M,) or None
-        EIG exacte, si calculable (cas linéaire-gaussien).
+        Exact EIG, if computable (linear-Gaussian case).
     """
     ax = ax or plt.subplots(figsize=(7, 4.2))[1]
 
@@ -63,7 +63,7 @@ def plot_bounds_vs_m(
             cons_up,
             color=COLORS["conservative"],
             alpha=0.20,
-            label="conservatif (Cor. 2)",
+            label="conservative (Cor. 2)",
         )
         ax.plot(ms, cons_low, color=COLORS["conservative"], lw=1.2, ls="--")
         ax.plot(ms, cons_up, color=COLORS["conservative"], lw=1.2, ls="--")
@@ -78,10 +78,10 @@ def plot_bounds_vs_m(
         )
 
     if truth is not None:
-        ax.plot(ms, truth, color=COLORS["exact"], lw=2.0, label="EIG exacte")
+        ax.plot(ms, truth, color=COLORS["exact"], lw=2.0, label="exact EIG")
 
-    ax.set_xlabel("nombre de capteurs $m$")
-    ax.set_ylabel("gain d'information (nats)")
+    ax.set_xlabel("number of sensors $m$")
+    ax.set_ylabel("information gain (nats)")
     ax.legend(fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
@@ -89,7 +89,7 @@ def plot_bounds_vs_m(
 
 
 def plot_two_strategies(ms, per_strategy, title=""):
-    """Deux designs, quatre bornes chacun -- le protocole du papier §2.
+    """Two designs, four bounds each -- the protocol from the paper's §2.
 
     Parameters
     ----------
@@ -98,9 +98,9 @@ def plot_two_strategies(ms, per_strategy, title=""):
 
     Notes
     -----
-    Dualité §2 : maximiser (19) équivaut à maximiser la borne SUP conservative. Les
-    deux designs **doivent** différer -- ce n'est pas une incohérence, c'est l'objet
-    de la figure.
+    Duality §2: maximizing (19) is equivalent to maximizing the conservative
+    upper bound. The two designs **must** differ -- this is not an
+    inconsistency, it is the point of the figure.
     """
     fig, axes = plt.subplots(
         1, len(per_strategy), figsize=(6 * len(per_strategy), 4.2), sharey=True, squeeze=False
@@ -118,12 +118,13 @@ def plot_two_strategies(ms, per_strategy, title=""):
 
 
 def plot_width_vs_m(ms, widths, title=""):
-    """Largeur d'encadrement (``upper - lower``) par stratégie.
+    """Bound width (``upper - lower``) per strategy.
 
-    Prop. 1 : la constante de sous-optimalité **croît** avec ``m`` en incrémental,
-    **décroît** en conservatif. Les largeurs suivent, et leur croisement est la vraie
-    transition entre les deux stratégies -- contrairement à ``crossover()``, qui vaut
-    ``p//2 + 1`` quel que soit le spectre.
+    Prop. 1: the sub-optimality constant **grows** with ``m`` for the
+    incremental strategy, and **shrinks** for the conservative one. The
+    widths follow suit, and their crossing point is the true transition
+    between the two strategies -- unlike ``crossover()``, which is always
+    ``p//2 + 1`` regardless of the spectrum.
     """
     fig, ax = plt.subplots(figsize=(6, 3.4))
     for label, w in widths.items():
@@ -134,8 +135,8 @@ def plot_width_vs_m(ms, widths, title=""):
             label=label,
             color=COLORS.get("incremental" if "inc" in label.lower() else "conservative"),
         )
-    ax.set_xlabel("nombre de capteurs $m$")
-    ax.set_ylabel("largeur (nats)")
+    ax.set_xlabel("number of sensors $m$")
+    ax.set_ylabel("width (nats)")
     ax.legend(fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
@@ -144,26 +145,27 @@ def plot_width_vs_m(ms, widths, title=""):
 
 
 def plot_gap_vs_parameter(values, gaps, xlabel=r"$\lambda$", mc_floor=None, title=""):
-    """Gap en fonction d'un paramètre du modèle.
+    """Gap as a function of a model parameter.
 
     Parameters
     ----------
     mc_floor : float or None
-        Plancher Monte-Carlo -- typiquement ``gap`` mesuré à ``lambda=0``, où le gap
-        vaut zéro en théorie (Rem. 2.2). Tracé en pointillés : rien en dessous n'est
-        un effet.
+        Monte-Carlo floor -- typically the ``gap`` measured at ``lambda=0``,
+        where the gap is theoretically zero (Rem. 2.2). Plotted as a dotted
+        line: nothing below it is a real effect.
 
     Notes
     -----
-    Le gap mesure la **non-gaussianité** de ``Y`` et ``Y|theta`` (Rem. 2.2 +
-    Cramér-Rao), pas la non-linéarité. ``lambda`` pilote la seconde ; la première en
-    est une conséquence, et le terme advectif ``lambda u d_x u`` étant quadratique en
-    ``u``, l'amplitude du champ compte autant que ``lambda``.
+    The gap measures the **non-Gaussianity** of ``Y`` and ``Y|theta`` (Rem.
+    2.2 + Cramér-Rao), not the non-linearity. ``lambda`` drives the latter;
+    the former is a consequence of it, and since the advective term
+    ``lambda u d_x u`` is quadratic in ``u``, the field's amplitude matters
+    just as much as ``lambda``.
     """
     fig, ax = plt.subplots(figsize=(6, 3.6))
     ax.plot(values, gaps, "o-", color=COLORS["Sigma_signal"], lw=1.8)
     if mc_floor is not None:
-        ax.axhline(mc_floor, color="0.5", ls=":", lw=1.2, label="plancher MC")
+        ax.axhline(mc_floor, color="0.5", ls=":", lw=1.2, label="MC floor")
         ax.legend(fontsize=8)
     ax.set_xlabel(xlabel)
     ax.set_ylabel("gap (nats)")
@@ -173,15 +175,15 @@ def plot_gap_vs_parameter(values, gaps, xlabel=r"$\lambda$", mc_floor=None, titl
     return fig
 
 
-#: Palette categorielle validee (skill dataviz, references/palette.md) -- ordre
-#: fixe, jamais recycle : slots 1-4 (bleu, vert, magenta, jaune), les seuls
-#: quatre qui passent le controle CVD toutes paires confondues. Une couleur par
-#: serie, plus un trait (plein/pointille) qui encode la famille (incremental
-#: vs conservatif) -- double encodage demande explicitement (4 series, la
-#: teinte seule ne suffit pas a distinguer vite les deux familles). Toutes les
-#: series partagent la meme position ``x`` (pas de decalage) : quand deux
-#: series sont proches en valeur, leurs boites se superposent -- c'est
-#: l'information (les bornes se resserrent), pas un defaut d'affichage.
+#: Validated categorical palette (dataviz skill, references/palette.md) -- fixed
+#: order, never recycled: slots 1-4 (blue, green, magenta, yellow), the only
+#: four that pass the CVD check across every pair. One color per series, plus
+#: a line style (solid/dashed) that encodes the family (incremental vs.
+#: conservative) -- double encoding was explicitly requested (4 series, hue
+#: alone is not enough to quickly distinguish the two families). All series
+#: share the same ``x`` position (no offset): when two series are close in
+#: value, their boxes overlap -- that is the information (the bounds are
+#: tightening), not a display defect.
 _SERIES_STYLE = {
     "inc_low": ("#2a78d6", "inc_lb", "-"),
     "inc_up": ("#008300", "inc_ub", "-"),
@@ -191,23 +193,35 @@ _SERIES_STYLE = {
 
 
 def _boxplot_series(ax, ms, values, color, label, linestyle="-"):
-    """Ligne (mediane sur les repetitions) + boxplot a chaque ``m`` -- une serie.
+    """Line (median across repetitions) + boxplot at each ``m`` -- one series.
 
-    ``values`` : ``(n_repeats, n_budgets)``. A ``n_repeats = 1``, la mediane
-    passe exactement par les points et chaque boite degenere en un trait --
-    normal, pas une erreur.
+    ``values`` : ``(n_repeats, n_budgets)``. At ``n_repeats = 1``, the median
+    passes exactly through the points and each box degenerates into a line --
+    expected, not a bug.
     """
     values = np.atleast_2d(values)
     ax.plot(
-        ms, np.median(values, axis=0), color=color, lw=2.0, ls=linestyle, zorder=2,
-        solid_capstyle="round", dash_capstyle="round",
+        ms,
+        np.median(values, axis=0),
+        color=color,
+        lw=2.0,
+        ls=linestyle,
+        zorder=2,
+        solid_capstyle="round",
+        dash_capstyle="round",
     )
     width = (ms[1] - ms[0]) * 0.3 if len(ms) > 1 else 0.6
     line_props = dict(color=color, linewidth=1.4)
     ax.boxplot(
-        values, positions=ms, widths=width,
-        patch_artist=True, showfliers=False, manage_ticks=False,
-        medianprops=line_props, whiskerprops=line_props, capprops=line_props,
+        values,
+        positions=ms,
+        widths=width,
+        patch_artist=True,
+        showfliers=False,
+        manage_ticks=False,
+        medianprops=line_props,
+        whiskerprops=line_props,
+        capprops=line_props,
         boxprops=dict(edgecolor=color, facecolor=color, alpha=0.12, linewidth=1.2),
         zorder=3,
     )
@@ -215,19 +229,19 @@ def _boxplot_series(ax, ms, values, color, label, linestyle="-"):
 
 
 def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, ax=None, title=""):
-    """Comme :func:`plot_bounds_vs_m`, mais un boxplot (sur les repetitions) a
-    chaque ``m`` plutot qu'une bande continue -- 4 series superposees, une
-    couleur et un trait chacune (cf. ``_SERIES_STYLE``), comme le prototype
-    NumPy. La zone entre borne inf et borne sup de chaque famille (le gap
-    certifie, Prop. 1) est hachuree -- existe pour l'incremental **et** le
-    conservatif, pas seulement l'un des deux.
+    """Like :func:`plot_bounds_vs_m`, but a boxplot (over repetitions) at
+    each ``m`` rather than a continuous band -- 4 overlaid series, one color
+    and one line style each (see ``_SERIES_STYLE``), as in the NumPy
+    prototype. The area between the lower and upper bound of each family
+    (the certified gap, Prop. 1) is hatched -- present for **both** the
+    incremental and the conservative family, not just one of them.
 
     Parameters
     ----------
     inc_low, inc_up : array ``(n_repeats, n_budgets)``
-        Encadrement incremental (Cor. 1), une valeur par repetition et par budget.
+        Incremental bounds (Cor. 1), one value per repetition and per budget.
     cons_low, cons_up : array ``(n_repeats, n_budgets)`` or None
-        Encadrement conservatif (Cor. 2), meme forme.
+        Conservative bounds (Cor. 2), same shape.
     """
     ax = ax or plt.subplots(figsize=(6.5, 4.5))[1]
     ms = np.asarray(ms)
@@ -239,24 +253,33 @@ def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, a
 
     med = {key: np.median(np.atleast_2d(arr), axis=0) for key, arr in series.items()}
     ax.fill_between(
-        ms, med["inc_low"], med["inc_up"],
-        facecolor="none", edgecolor="0.35", hatch="////", linewidth=0.0, zorder=1,
+        ms,
+        med["inc_low"],
+        med["inc_up"],
+        facecolor="none",
+        edgecolor="0.35",
+        hatch="////",
+        linewidth=0.0,
+        zorder=1,
     )
     if "cons_low" in med:
         ax.fill_between(
-            ms, med["cons_low"], med["cons_up"],
-            facecolor="none", edgecolor="0.35", hatch="\\\\\\\\", linewidth=0.0, zorder=1,
+            ms,
+            med["cons_low"],
+            med["cons_up"],
+            facecolor="none",
+            edgecolor="0.35",
+            hatch="\\\\\\\\",
+            linewidth=0.0,
+            zorder=1,
         )
 
-    handles = [
-        _boxplot_series(ax, ms, arr, *_SERIES_STYLE[key])
-        for key, arr in series.items()
-    ]
+    handles = [_boxplot_series(ax, ms, arr, *_SERIES_STYLE[key]) for key, arr in series.items()]
 
     ax.set_xticks(ms)
     ax.set_xticklabels(ms)
-    ax.set_xlabel("nombre de capteurs $m$")
-    ax.set_ylabel("gain d'information (nats)")
+    ax.set_xlabel("number of sensors $m$")
+    ax.set_ylabel("information gain (nats)")
     ax.legend(handles=handles, fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
@@ -264,13 +287,13 @@ def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, a
 
 
 def plot_two_strategies_boxplot(ms, per_strategy, title=""):
-    """Version boxplot de :func:`plot_two_strategies` -- meme mise en page.
+    """Boxplot version of :func:`plot_two_strategies` -- same layout.
 
     Parameters
     ----------
     per_strategy : dict[str, dict]
-        ``{"iEIG>= (19)": {"inc_low": (n_repeats, n_budgets), ...}}`` -- memes
-        cles que :func:`plot_two_strategies`, mais des arrays de repetitions.
+        ``{"iEIG>= (19)": {"inc_low": (n_repeats, n_budgets), ...}}`` -- same
+        keys as :func:`plot_two_strategies`, but arrays of repetitions.
     """
     fig, axes = plt.subplots(
         1, len(per_strategy), figsize=(6.5 * len(per_strategy), 4.2), sharey=True, squeeze=False

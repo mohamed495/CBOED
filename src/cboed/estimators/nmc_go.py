@@ -1,11 +1,11 @@
-r"""EIG goal-oriented par Monte-Carlo imbriqué -- ``theta = B eta + xi``.
+r"""Goal-oriented EIG via nested Monte Carlo -- ``theta = B eta + xi``.
 
-:class:`~cboed.estimators.nmc.NestedMonteCarloEIG` estime ``EIG(eta)`` : son
-``log p(y|theta)`` est directement ``likelihood.log_likelihood(y, theta, ...)``
-parce que ``theta`` y est **le paramètre du modèle direct lui-même**. Ici
-``theta`` est une projection linéaire ``B eta + xi`` de dimension inférieure
-(la QoI) : ``p(y|theta)`` n'a plus de forme fermée, c'est une espérance sur
-``eta | theta`` -- un second niveau de Monte-Carlo imbriqué.
+:class:`~cboed.estimators.nmc.NestedMonteCarloEIG` estimates ``EIG(eta)``: its
+``log p(y|theta)`` is directly ``likelihood.log_likelihood(y, theta, ...)``
+because ``theta`` there **is the forward-model parameter itself**. Here
+``theta`` is a lower-dimensional linear projection ``B eta + xi`` (the QoI):
+``p(y|theta)`` no longer has a closed form, it is an expectation over
+``eta | theta`` -- a second level of nested Monte Carlo.
 
 .. math::
     \mathrm{EIG}(\theta) = E_{\theta, y}\left[
@@ -13,17 +13,17 @@ parce que ``theta`` y est **le paramètre du modèle direct lui-même**. Ici
     \right], \qquad
     p(y|\theta) = E_{\eta|\theta}[p(y|\eta)]
 
-``eta | theta`` est gaussienne en forme fermée (Rem. 3.1, même calcul que
+``eta | theta`` is Gaussian in closed form (Rem. 3.1, the same computation as
 :func:`cboed.bounds.diagnostics.sample_based.sample_Sigma_Y_given_theta`) --
-valable seulement pour ``B`` linéaire (constant), et sans lui, aucune forme
-fermée pour tirer ``eta | theta`` n'existe.
+valid only for linear (constant) ``B``, and without it, no closed form exists
+for drawing ``eta | theta``.
 
-``log p(y)`` reste le marginal usuel (indépendant de ``theta``) : même
-estimateur imbriqué que dans :mod:`cboed.estimators.nmc`.
+``log p(y)`` remains the usual marginal (independent of ``theta``): the same
+nested estimator as in :mod:`cboed.estimators.nmc`.
 
-Coût : ``n_outer * (n_inner_theta + n_inner_marginal)`` évaluations de
-``log_likelihood`` (donc du modèle direct) -- un cran plus cher que le NMC
-standard, à cause du second niveau d'imbrication.
+Cost: ``n_outer * (n_inner_theta + n_inner_marginal)`` evaluations of
+``log_likelihood`` (hence of the forward model) -- one notch more expensive
+than standard NMC, due to the second level of nesting.
 """
 
 import jax
@@ -38,9 +38,9 @@ from cboed.estimators.base import EIGEstimator, chunked_vmap
 def _eta_given_theta_params(prior_eta, B: Array, Sigma_xi: Array):
     r"""``eta | theta ~ N(mean_fn(theta), Sigma_pos)`` -- Rem. 3.1, ``B`` constant.
 
-    Covariance indépendante de ``theta`` (factorisée une fois) ; seule la
-    moyenne en dépend. Même calcul que dans ``sample_Sigma_Y_given_theta``,
-    exposé ici pour être réutilisé sans dupliquer le Kalman.
+    Covariance independent of ``theta`` (factored once); only the mean
+    depends on it. Same computation as in ``sample_Sigma_Y_given_theta``,
+    exposed here to be reused without duplicating the Kalman step.
     """
     Sigma_eta = prior_eta.Sigma()
     m_eta = prior_eta.mu
@@ -56,26 +56,26 @@ def _eta_given_theta_params(prior_eta, B: Array, Sigma_xi: Array):
 
 
 class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
-    r"""EIG(theta) par MC imbriqué, ``theta = B eta + xi`` -- Rem. 3.1.
+    r"""EIG(theta) via nested MC, ``theta = B eta + xi`` -- Rem. 3.1.
 
     Parameters
     ----------
     likelihood : Likelihood
-        Vraisemblance ``p(y | eta, design)`` sur le champ **complet**.
+        Likelihood ``p(y | eta, design)`` on the **full** field.
     prior_eta : Prior
-        Prior sur ``eta`` (le champ complet, pas la QoI).
+        Prior on ``eta`` (the full field, not the QoI).
     B : Float[Array, "n_qoi n_eta"]
-        Jacobienne de ``h`` (projection QoI), constante.
+        Jacobian of ``h`` (QoI projection), constant.
     Sigma_xi : Float[Array, "n_qoi n_qoi"]
-        Covariance du bruit ``xi``. Cf. les modules ``bounds`` : ``Sigma_xi -> 0``
-        est une limite singulière, ne pas y aller.
+        Covariance of the noise ``xi``. Cf. the ``bounds`` modules: ``Sigma_xi -> 0``
+        is a singular limit, do not go there.
 
     Notes
     -----
-    ⚠️ Biais dans les deux termes imbriqués (``log p(y|theta)`` **et**
-    ``log p(y)``), chacun sous-estimé à ``n_inner`` fini (même mécanisme que
-    :class:`~cboed.estimators.nmc.NestedMonteCarloEIG` -- Jensen sur le
-    ``logsumexp``). Le biais net sur l'EIG n'a pas de signe garanti a priori.
+    Warning: bias in both nested terms (``log p(y|theta)`` **and**
+    ``log p(y)``), each underestimated at finite ``n_inner`` (same mechanism
+    as :class:`~cboed.estimators.nmc.NestedMonteCarloEIG` -- Jensen on the
+    ``logsumexp``). The net bias on the EIG has no guaranteed sign a priori.
     """
 
     @property
@@ -108,7 +108,7 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
         mean_fn, L_pos = _eta_given_theta_params(self.prior_eta, self.B, self.Sigma_xi)
         n_eta = self.prior_eta.mu.shape[0]
 
-        # -- boucle externe : eta_i ~ prior, theta_i = B eta_i + xi_i, y_i ~ p(.|eta_i) --
+        # -- outer loop: eta_i ~ prior, theta_i = B eta_i + xi_i, y_i ~ p(.|eta_i) --
         eta_outer = self.prior_eta.sample(k_eta, n_outer)
         L_xi = psd_sqrt(self.Sigma_xi)
         z_xi = jax.random.normal(k_xi, (n_outer, self.Sigma_xi.shape[0]))
@@ -118,7 +118,7 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
             eta_outer, keys_y
         )
 
-        # -- log p(y_i | theta_i) : MC imbrique sur eta' | theta_i (Rem. 3.1) --
+        # -- log p(y_i | theta_i): nested MC over eta' | theta_i (Rem. 3.1) --
         def log_lik_given_theta(y, theta, k):
             z = jax.random.normal(k, (n_inner_theta, n_eta))
             etas_cond = mean_fn(theta) + z @ L_pos.T
@@ -130,7 +130,7 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
             log_lik_given_theta, y_outer, theta_outer, keys_theta_inner, chunk_size=chunk_size
         )
 
-        # -- log p(y_i) : marginal usuel, MC imbrique sur eta ~ prior --------
+        # -- log p(y_i): usual marginal, nested MC over eta ~ prior ---------
         def log_marginal(y, k):
             etas_prior = self.prior_eta.sample(k, n_inner_marginal)
             lls = jax.vmap(lambda e: self.likelihood.log_likelihood(y, e, design))(etas_prior)

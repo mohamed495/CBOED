@@ -1,4 +1,4 @@
-"""EIG par NMC variationnel avec proposition de Laplace."""
+"""EIG via variational NMC with a Laplace proposal."""
 
 import jax
 import jax.numpy as jnp
@@ -10,26 +10,26 @@ from cboed.estimators.base import EIGEstimator
 
 
 class LaplaceProposal:
-    r"""``q(. | y) = N(mu_post(y), Gamma_post)`` -- proposition d'importance.
+    r"""``q(. | y) = N(mu_post(y), Gamma_post)`` -- importance proposal.
 
-    Ce dont VNMC a besoin d'une proposition : **tirer** et **évaluer sa
-    densité**. Ni l'un ni l'autre ne réclame ``Gamma_post`` : ce sont des
-    actions, d'où un objet séparé du contrat :class:`InferenceModel`.
+    What VNMC needs from a proposal: to **sample** it and to **evaluate its
+    density**. Neither requires ``Gamma_post`` itself: these are actions,
+    hence a separate object from the :class:`InferenceModel` contract.
 
-    L'intérêt est de hisser la factorisation. ``Gamma_post^{-1}`` ne dépend ni
-    de ``y`` ni de rien qui varie dans la boucle externe (``theta_lin`` et
-    ``design`` sont fixes) : elle est factorisée **une fois** à la construction.
-    Sinon chaque appel à ``_mu`` refait le même Cholesky -- ``n_outer`` fois la
-    même matrice, et ``vmap`` ne factorise pas des calculs identiques à travers
-    les instances vmappées.
+    The point is to hoist the factorization. ``Gamma_post^{-1}`` depends
+    neither on ``y`` nor on anything that varies in the outer loop
+    (``theta_lin`` and ``design`` are fixed): it is factored **once** at
+    construction. Otherwise every call to ``_mu`` would redo the same
+    Cholesky -- ``n_outer`` times for the same matrix, and ``vmap`` does not
+    factor identical computations across vmapped instances.
 
     Parameters
     ----------
     inference : InferenceModel
-        Doit exposer ``prior``, ``likelihood`` et ``_posterior_chol``.
+        Must expose ``prior``, ``likelihood`` and ``_posterior_chol``.
     theta_lin : Float[Array, " n_param"]
-        Point de linéarisation. Exact en LG ; à ``lambda > 0`` le MAP serait
-        meilleur -- c'est un argument, pas une décision de cet objet.
+        Linearization point. Exact in LG; at ``lambda > 0`` the MAP would be
+        better -- that is an argument, not a decision made by this object.
     design : Int[Array, " n_sensors"] | None
     """
 
@@ -37,13 +37,13 @@ class LaplaceProposal:
         self._inference = inference
         self._theta_lin = theta_lin
         self._design = design
-        # UNE factorisation, réutilisée sur toute la boucle externe.
+        # ONE factorization, reused across the whole outer loop.
         self._chol = inference._posterior_chol(theta_lin, design)
         cov = jsp.linalg.cho_solve(self._chol, jnp.eye(theta_lin.shape[0], dtype=theta_lin.dtype))
         self._L = jnp.linalg.cholesky(cov)
 
     def mean(self, y: Float[Array, " n_sensors"]) -> Float[Array, " n_param"]:
-        """``mu_post(y)`` -- un seul solve, sur la factorisation stockée."""
+        """``mu_post(y)`` -- a single solve, using the stored factorization."""
         grad = self._inference.likelihood.grad_log_likelihood(
             y=y, theta=self._theta_lin, design=self._design
         )
@@ -72,23 +72,23 @@ class LaplaceProposal:
 
 
 class VariationalNMCEIG(EIGEstimator):
-    r"""EIG par NMC variationnel.
+    r"""EIG via variational NMC.
 
-    Borne **supérieure**, comme NMC, mais plus serrée quand ``q`` approxime bien
-    la postérieure (le biais vaut ``E[log p(y) - log p_hat]``, contrôlé par la
-    variance des poids d'importance).
+    An **upper** bound, like NMC, but tighter when ``q`` approximates the
+    posterior well (the bias equals ``E[log p(y) - log p_hat]``, controlled
+    by the variance of the importance weights).
 
-    En LG, la proposition de Laplace est la postérieure **exacte** -> poids
-    constants -> variance nulle -> ``VNMC = EIG``.
+    In LG, the Laplace proposal is the **exact** posterior -> constant
+    weights -> zero variance -> ``VNMC = EIG``.
 
-    Pour un encadrement, apparier avec PCE (borne **inférieure**) :
-    ``PCE <= EIG <= VNMC``. NMC et VNMC sont du **même côté** -- leur différence
-    ne mesure pas un encadrement.
+    For a bracketing bound, pair with PCE (**lower** bound):
+    ``PCE <= EIG <= VNMC``. NMC and VNMC are on the **same side** -- their
+    difference does not measure a bracket.
 
     Notes
     -----
-    ``VNMC <= NMC`` n'est pas un théorème : c'est vrai quand ``q`` bat le prior
-    (cas LG), pas universellement.
+    ``VNMC <= NMC`` is not a theorem: it holds when ``q`` beats the prior
+    (the LG case), not universally.
     """
 
     @property
@@ -112,7 +112,7 @@ class VariationalNMCEIG(EIGEstimator):
     ) -> Float[Array, ""]:
         k_theta, k_y, k_prop = jax.random.split(key, 3)
 
-        # -- boucle externe : (theta_i, y_i) ~ p(theta) p(y | theta) -------
+        # -- outer loop: (theta_i, y_i) ~ p(theta) p(y | theta) ------------
         thetas = self.prior.sample(k_theta, n_outer)
         keys_y = jax.random.split(k_y, n_outer)
         ys = jax.vmap(lambda th, k: self.likelihood.sample(k, th, design, n_samples=1)[0])(
@@ -123,7 +123,7 @@ class VariationalNMCEIG(EIGEstimator):
             ys, thetas
         )
 
-        # -- proposition : construite UNE fois -----------------------------
+        # -- proposal: built ONCE ------------------------------------------
         proposal = LaplaceProposal(self.inference, self.prior.mu, design)
         keys_prop = jax.random.split(k_prop, n_outer)
 
@@ -133,7 +133,7 @@ class VariationalNMCEIG(EIGEstimator):
             log_prior = jax.vmap(self.prior.log_prior)(theta_prop)
             log_q = jax.vmap(lambda th: proposal.log_pdf(th, y))(theta_prop)
 
-            # logsumexp, jamais log(mean(exp)) : overflow garanti sinon.
+            # logsumexp, never log(mean(exp)): guaranteed overflow otherwise.
             log_weights = log_lik + log_prior - log_q
             return jsp.special.logsumexp(log_weights) - jnp.log(n_inner)
 

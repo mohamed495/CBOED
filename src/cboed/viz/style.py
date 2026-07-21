@@ -1,20 +1,20 @@
-r"""Style partagé.
+r"""Shared style.
 
-Règle du module ``viz`` : les fonctions prennent des **tableaux** et rendent des
-``Figure``. Aucun calcul, aucune lecture disque, aucun appel au modèle direct. Les
-scripts calculent (avec cache) et appellent ``viz``.
+``viz`` module rule: functions take **arrays** and return ``Figure`` objects. No
+computation, no disk reads, no direct model calls. Scripts compute (with caching)
+and call ``viz``.
 """
 
 from pathlib import Path
 
 import matplotlib
 
-matplotlib.use("Agg")  # avant pyplot : pas de serveur X dans l'env pixi
+matplotlib.use("Agg")  # before pyplot: no X server in the pixi env
 
 import matplotlib.pyplot as plt
 
 # -- palette -------------------------------------------------------------
-# Une couleur par objet, tenue dans toutes les figures.
+# One color per object, held consistent across all figures.
 COLORS = {
     "prior": "#925625",
     "posterior": "#2b6cb0",
@@ -29,9 +29,9 @@ COLORS = {
     "exact": "#2c3e50",
 }
 
-#: Divergente et centrée en zéro -- pour les différences de matrices.
+#: Diverging and zero-centered -- for matrix differences.
 CMAP_DIFF = "RdBu_r"
-#: Séquentielle -- pour les matrices SDP.
+#: Sequential -- for SPD matrices.
 CMAP_PSD = "viridis"
 
 RC = {
@@ -49,13 +49,13 @@ RC = {
 
 
 def use_style() -> None:
-    """Applique ``RC``. À appeler une fois par script."""
+    """Apply ``RC``. Call once per script."""
     plt.rcParams.update(RC)
 
 
 def save(fig, path: str | Path) -> Path:
-    """Enregistre et ferme. Fermer explicitement : matplotlib garde sinon toutes les
-    figures en mémoire, et un balayage en produit des dizaines.
+    """Save and close. Close explicitly: otherwise matplotlib keeps every
+    figure in memory, and a sweep produces dozens of them.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,10 +65,10 @@ def save(fig, path: str | Path) -> Path:
 
 
 def symmetric_limits(*arrays) -> tuple[float, float]:
-    """``(-v, v)`` avec ``v = max|.|`` -- pour une colormap divergente centrée.
+    """``(-v, v)`` with ``v = max|.|`` -- for a zero-centered diverging colormap.
 
-    Sans ça, ``RdBu_r`` place le blanc à la moyenne et non à zéro : une différence
-    partout positive paraîtrait changer de signe.
+    Without this, ``RdBu_r`` places white at the mean rather than at zero: a
+    difference that is everywhere positive would appear to change sign.
     """
     v = max(float(abs(a).max()) for a in arrays)
     return -v, v

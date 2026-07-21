@@ -1,13 +1,15 @@
-r"""Matrices diagnostiques et les moments qui les produisent.
+r"""Diagnostic matrices and the moments that produce them.
 
-La figure centrale est :func:`plot_diagnostics` -- les deux paires du théorème 2.1 et
-leurs différences.
+The central figure is :func:`plot_diagnostics` -- the two pairs from Theorem
+2.1 and their differences.
 
-À ``lambda = 0`` : ``Sigma_signal = Sigma_Y`` et ``Sigma_noise = Sigma_{Y|theta}``,
-donc les deux panneaux de différence sont vides (Rem. 2.2). C'est la **figure de
-validation** : si elles ne sont pas vides en linéaire, quelque chose est faux.
+At ``lambda = 0``: ``Sigma_signal = Sigma_Y`` and ``Sigma_noise =
+Sigma_{Y|theta}``, so both difference panels are empty (Rem. 2.2). This is
+the **validation figure**: if they are not empty in the linear case,
+something is wrong.
 
-À ``lambda != 0``, la structure qui apparaît dans les différences **est** le gap.
+At ``lambda != 0``, the structure that appears in the differences **is** the
+gap.
 """
 
 import matplotlib.pyplot as plt
@@ -29,13 +31,14 @@ def _imshow(ax, M, title, cmap=CMAP_PSD, vlim=None):
 
 
 def plot_diagnostics(diagnostics, title=""):
-    """Les deux paires du Thm 2.1 et leurs différences.
+    """The two pairs from Thm 2.1 and their differences.
 
-    Ligne 1 : ``Sigma_Y``, ``Sigma_signal``, leur différence -- le numérateur.
-    Ligne 2 : ``Sigma_{Y|theta}``, ``Sigma_noise``, leur différence -- le dénominateur.
+    Row 1: ``Sigma_Y``, ``Sigma_signal``, their difference -- the numerator.
+    Row 2: ``Sigma_{Y|theta}``, ``Sigma_noise``, their difference -- the
+    denominator.
 
-    Chaque paire partage son échelle de couleur : sans ça, deux matrices proches
-    paraîtraient différentes parce que leurs extrema le sont.
+    Each pair shares its color scale: without that, two close matrices would
+    look different simply because their extrema are.
     """
     d = diagnostics
     pairs = [
@@ -46,7 +49,7 @@ def plot_diagnostics(diagnostics, title=""):
 
     for row, (A, B, la, lb) in enumerate(pairs):
         A, B = np.asarray(A), np.asarray(B)
-        vlim = (min(A.min(), B.min()), max(A.max(), B.max()))  # echelle partagee
+        vlim = (min(A.min(), B.min()), max(A.max(), B.max()))  # shared scale
         _imshow(axes[row, 0], A, la, vlim=vlim)
         _imshow(axes[row, 1], B, lb, vlim=vlim)
         diff = A - B
@@ -66,19 +69,20 @@ def plot_diagnostics(diagnostics, title=""):
 
 
 def plot_moments(L, H, I_eta, J_h=None, title=""):
-    """Les ingrédients de Prop. 4.
+    """The ingredients of Prop. 4.
 
-    ``L(u)`` -- jacobienne moyenne, ``(q, p)``.
-    ``H(u)`` -- covariance des jacobiennes, ``(q, q)``. **Nulle si u est linéaire.**
-    ``I_eta`` -- précision du prior, ``(q, q)``.
-    ``J(h)`` -- terme QoI, ``(q, q)``. Seule différence entre signal et noise.
+    ``L(u)`` -- mean jacobian, ``(q, p)``.
+    ``H(u)`` -- covariance of the jacobians, ``(q, q)``. **Zero if u is linear.**
+    ``I_eta`` -- prior precision, ``(q, q)``.
+    ``J(h)`` -- QoI term, ``(q, q)``. The only difference between signal and noise.
 
-    ``H(u)`` est la seule matrice qui distingue Prop. 4 d'un calcul linéaire-gaussien :
-    la voir vide à ``lambda=0`` et pleine à ``lambda>0`` valide la branche.
+    ``H(u)`` is the only matrix that distinguishes Prop. 4 from a
+    linear-Gaussian computation: seeing it empty at ``lambda=0`` and full at
+    ``lambda>0`` validates that branch.
     """
     mats = [
         (L, r"$L(u) = \mathbb{E}[\mathrm{Jac}\,u]^T$"),
-        (H, r"$H(u)$ -- covariance des jacobiennes"),
+        (H, r"$H(u)$ -- covariance of the jacobians"),
         (I_eta, r"$\mathcal{I}_\eta = \Gamma_{prior}^{-1}$"),
     ]
     if J_h is not None:
@@ -95,15 +99,16 @@ def plot_moments(L, H, I_eta, J_h=None, title=""):
 
 
 def plot_matrix_comparison(mats, labels, reference=0, title=""):
-    """Plusieurs estimations de la **même** matrice, et leurs écarts à une référence.
+    """Several estimates of the **same** matrix, and their deviations from a
+    reference.
 
-    Pour comparer standard et goal-oriented en linéaire, ou deux voies vers
-    ``Sigma_signal`` (gradient §3.3 contre approximation §3.2).
+    Used to compare standard and goal-oriented in the linear case, or two
+    routes to ``Sigma_signal`` (gradient §3.3 versus approximation §3.2).
 
     Parameters
     ----------
     reference : int
-        Index de la matrice servant de référence pour les écarts.
+        Index of the matrix used as the reference for the deviations.
     """
     n = len(mats)
     ref = np.asarray(mats[reference])
@@ -120,7 +125,7 @@ def plot_matrix_comparison(mats, labels, reference=0, title=""):
         _imshow(axes[0, k], M, label, vlim=vlim)
         rel = np.linalg.norm(diffs[k]) / np.linalg.norm(ref)
         suffix = " (reference)" if k == reference else f"  (rel. {rel:.1e})"
-        _imshow(axes[1, k], diffs[k], f"ecart{suffix}", cmap=CMAP_DIFF, vlim=dlim)
+        _imshow(axes[1, k], diffs[k], f"deviation{suffix}", cmap=CMAP_DIFF, vlim=dlim)
 
     if title:
         fig.suptitle(title, fontsize=11)
@@ -129,18 +134,18 @@ def plot_matrix_comparison(mats, labels, reference=0, title=""):
 
 
 def plot_spectrum_comparison(mats, labels, title=""):
-    """Spectres superposés, échelle log.
+    """Overlaid spectra, log scale.
 
-    Deux matrices peuvent se ressembler visuellement et avoir des spectres très
-    différents -- c'est le spectre qui pilote les log-dets, donc les bornes.
+    Two matrices can look visually similar and have very different spectra
+    -- it is the spectrum that drives the log-dets, and thus the bounds.
     """
     fig, ax = plt.subplots(figsize=(6, 3.4))
     for M, label in zip(mats, labels, strict=True):
         M = 0.5 * (M + M.T)
         ev = np.linalg.eigvalsh(M)[::-1]
         ax.semilogy(np.arange(1, len(ev) + 1), np.clip(ev, 1e-16, None), lw=1.6, label=label)
-    ax.set_xlabel("indice")
-    ax.set_ylabel("valeur propre")
+    ax.set_xlabel("index")
+    ax.set_ylabel("eigenvalue")
     ax.legend(fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)

@@ -1,25 +1,25 @@
-r"""Les deux familles de bornes -- corollaires 1 et 2.
+r"""The two bound families -- Corollaries 1 and 2.
 
-⚠️ **Le piège de direction.** Le *même* couple ``(A, B)`` donne des bornes
-**opposées** selon la stratégie :
+⚠️ **The direction trap.** The *same* pair ``(A, B)`` gives **opposite**
+bounds depending on the strategy:
 
 ===============================  ==========================  ==================
                                  ``(signal, Y|theta)``       ``(Y, noise)``
 ===============================  ==========================  ==================
-**Incrémental** (Cor. 1)         borne **INF** (15)          borne **SUP** (16)
-**Conservatif** (Cor. 2)         borne **SUP** (18)          borne **INF** (17)
+**Incremental** (Cor. 1)         **LOWER** bound (15)        **UPPER** bound (16)
+**Conservative** (Cor. 2)        **UPPER** bound (18)        **LOWER** bound (17)
 ===============================  ==========================  ==================
 
-D'où des noms qui encodent les deux axes. Jamais ``BS``/``BI`` : le prototype les
-utilise et le notebook goal-oriented écrit déjà « upper bound (LB) » puis
-« Upper bound (UB) » à deux cellules d'écart.
+Hence names that encode both axes. Never ``BS``/``BI``: the prototype uses
+them, and the goal-oriented notebook already writes "upper bound (LB)" then
+"Upper bound (UB)" two cells apart.
 
-**Régimes** (Prop. 1) : la constante de sous-optimalité **croît avec ``m``** en
-incrémental, **décroît** en conservatif. Petit budget -> incrémental ; grand budget
--> conservatif. Complémentaires, pas concurrentes.
+**Regimes** (Prop. 1): the suboptimality constant **grows with ``m``** in the
+incremental strategy, **shrinks** in the conservative one. Small budget ->
+incremental; large budget -> conservative. Complementary, not competing.
 
-**Dualité** (§2 du papier) : maximiser la borne inf incrémentale ≡ maximiser la
-borne sup conservative. Et inversement.
+**Duality** (§2 of the paper): maximizing the incremental lower bound ≡
+maximizing the conservative upper bound. And conversely.
 """
 
 from dataclasses import dataclass, field
@@ -36,27 +36,28 @@ from cboed.bounds.schur import log_ratio
 @jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class BoundResult:
-    """Encadrement certifié de ``EIG(design)``."""
+    """Certified enclosure of ``EIG(design)``."""
 
     lower: Float[Array, ""]
     upper: Float[Array, ""]
     certified: bool = field(metadata=dict(static=True))
-    """L'ordre de Loewner du Thm 2.1 est-il garanti ? (hérité du diagnostic)"""
+    """Is the Loewner order of Thm 2.1 guaranteed? (inherited from the diagnostic)"""
 
     @property
     def gap(self) -> Float[Array, ""]:
         """``upper - lower``.
 
-        Mesure la **non-gaussianité** de ``Y`` et de ``Y|theta``, pas la
-        non-linéarité de ``u`` : Rem. 2.2 dit que les bornes sont serrées ssi
-        ``Sigma_signal = Sigma_Y`` et ``Sigma_noise = Sigma_{Y|theta}``, ce qui par
-        Cramér-Rao force ``Y`` gaussien. ``lambda`` pilote la non-linéarité ; la
-        non-gaussianité en est la conséquence, pas la définition.
+        Measures the **non-Gaussianity** of ``Y`` and ``Y|theta``, not the
+        non-linearity of ``u``: Rem. 2.2 states that the bounds are tight iff
+        ``Sigma_signal = Sigma_Y`` and ``Sigma_noise = Sigma_{Y|theta}``, which
+        by Cramér-Rao forces ``Y`` Gaussian. ``lambda`` drives the
+        non-linearity; the non-Gaussianity is a consequence of it, not its
+        definition.
         """
         return self.upper - self.lower
 
     def is_tight(self, tolerance: float) -> bool:
-        """``gap < tolerance``. À ne pas confondre avec :attr:`certified`."""
+        """``gap < tolerance``. Not to be confused with :attr:`certified`."""
         return bool(self.gap < tolerance)
 
 
@@ -66,15 +67,15 @@ def incremental_bounds(
     diagnostics: DiagnosticMatrices,
     design: Int[Array, " n_sensors"] | None = None,
 ) -> BoundResult:
-    r"""Corollaire 1 -- équations (15)-(16).
+    r"""Corollary 1 -- equations (15)-(16).
 
     .. math::
         \tfrac12 \ln \frac{|W^T \Sigma_{\rm signal} W|}{|W^T \Sigma_{Y|\theta} W|}
         \;\le\; \mathrm{EIG}(W) \;\le\;
         \tfrac12 \ln \frac{|W^T \Sigma_Y W|}{|W^T \Sigma_{\rm noise} W|}
 
-    Compare l'information tirée de ``Y_m = W^T Y`` à celle d'**aucune**
-    observation (``EIG(∅) = 0``). Entièrement calculable, aucun terme inconnu.
+    Compares the information drawn from ``Y_m = W^T Y`` to that of **no**
+    observation at all (``EIG(∅) = 0``). Fully computable, no unknown term.
     """
     return BoundResult(
         lower=log_ratio(diagnostics.Sigma_signal, diagnostics.Sigma_Y_given_theta, design),
@@ -90,40 +91,42 @@ def conservative_bounds(
     design: Int[Array, " n_sensors"] | None = None,
     eig_full: Float[Array, ""] | None = None,
 ) -> BoundResult:
-    r"""Corollaire 2 -- équations (17)-(18).
+    r"""Corollary 2 -- equations (17)-(18).
 
-    Compare l'information tirée de ``Y_m`` à celle du dataset **complet**
-    ``EIG(I_p)``, d'où « conservatif » : la stratégie cherche à retenir un maximum
-    de l'information disponible.
+    Compares the information drawn from ``Y_m`` to that of the **full**
+    dataset ``EIG(I_p)``, hence "conservative": the strategy tries to retain
+    as much of the available information as possible.
 
     Parameters
     ----------
     diagnostics : DiagnosticMatrices
     design : Int[Array, " n_sensors"] | None
     eig_full : Float[Array, ""] | None
-        ``EIG(I_p)``, **inconnu** en pratique. ``None`` (défaut) -> il est encadré
-        par le corollaire 1 appliqué à ``W = I_p``, ce qui garde les bornes
-        entièrement calculables **et certifiées**. Voir Notes.
+        ``EIG(I_p)``, **unknown** in practice. ``None`` (default) -> it is
+        bounded by Corollary 1 applied to ``W = I_p``, which keeps the bounds
+        fully computable **and** certified. See Notes.
 
     Notes
     -----
-    ⚠️ **Pourquoi ne pas estimer ``eig_full`` par Monte-Carlo.** Le prototype
-    NumPy injecte un ``eig_offset`` estimé par MC dans (17)-(18) -- ce qui
-    **décertifie** la borne : un encadrement garanti additionné d'une estimation
-    bruitée n'est plus un encadrement.
+    ⚠️ **Why not estimate ``eig_full`` by Monte Carlo.** The NumPy prototype
+    injects an MC-estimated ``eig_offset`` into (17)-(18) -- which
+    **decertifies** the bound: a guaranteed enclosure plus a noisy estimate is
+    no longer an enclosure.
 
-    Inutile de l'estimer. Cor. 1 à ``W = I_p`` borne ``EIG(I_p)`` gratuitement :
+    No need to estimate it. Cor. 1 at ``W = I_p`` bounds ``EIG(I_p)`` for
+    free:
 
     .. math::
         \tfrac12 \ln \tfrac{|\Sigma_{\rm signal}|}{|\Sigma_{Y|\theta}|}
         \;\le\; \mathrm{EIG}(I_p) \;\le\;
         \tfrac12 \ln \tfrac{|\Sigma_Y|}{|\Sigma_{\rm noise}|}
 
-    En substituant la borne INF dans (17) et la borne SUP dans (18), les bornes
-    conservatives restent valides. Plus lâches que si ``EIG(I_p)`` était connu --
-    mais certifiées, ce qui est le point du module.
+    Substituting the LOWER bound into (17) and the UPPER bound into (18)
+    keeps the conservative bounds valid. Looser than if ``EIG(I_p)`` were
+    known -- but certified, which is the point of the module.
 
-    ``eig_full`` reste acceptée pour comparer avec l'approche du prototype.
+    ``eig_full`` is still accepted for comparison against the prototype's
+    approach.
     """
     delta_lower = log_ratio(diagnostics.Sigma_Y, diagnostics.Sigma_noise, design) - log_ratio(
         diagnostics.Sigma_Y, diagnostics.Sigma_noise, None

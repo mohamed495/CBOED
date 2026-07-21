@@ -1,4 +1,4 @@
-"""Vraisemblance gaussienne à bruit additif."""
+"""Gaussian likelihood with additive noise."""
 
 from functools import partial
 
@@ -20,9 +20,9 @@ class GaussianLikelihood(Likelihood):
     Parameters
     ----------
     model : ForwardModel
-        Modèle direct.
+        Forward model.
     Sigma_obs : Float[Array, "n_obs n_obs"]
-        Covariance du bruit sur l'observable **complet** (``p x p``).
+        Noise covariance on the **full** observable (``p x p``).
     """
 
     def __init__(self, **hyperparameters) -> None:
@@ -39,11 +39,12 @@ class GaussianLikelihood(Likelihood):
     def _obs_chol(
         self, design: Int[Array, " n_sensors"] | None = None
     ) -> tuple[Float[Array, "n_sensors n_sensors"], bool]:
-        r"""Cholesky de ``Sigma_obs`` restreint au design (``W_m^T Sigma_obs W_m``).
+        r"""Cholesky of ``Sigma_obs`` restricted to the design (``W_m^T Sigma_obs W_m``).
 
-        **Le seul endroit qui sait restreindre.** Toute méthode qui touche au
-        bruit passe par ici -- y compris :meth:`sample`. Le jour où ``Sigma_obs``
-        devient isotrope (``sigma^2 I_m``), un seul point change.
+        **The only place that knows how to restrict.** Every method that
+        touches the noise goes through here -- including :meth:`sample`. The
+        day ``Sigma_obs`` becomes isotropic (``sigma^2 I_m``), only one place
+        changes.
         """
         Sigma = self.Sigma_obs if design is None else self.Sigma_obs[jnp.ix_(design, design)]
         return jsp.linalg.cho_factor(Sigma, lower=True)
@@ -68,7 +69,7 @@ class GaussianLikelihood(Likelihood):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
-        """Déjà composé avec ``H(design)`` par le modèle direct."""
+        """Already composed with ``H(design)`` by the forward model."""
         return self.model.jacobian_operator(theta, design)
 
     @partial(jax.jit, static_argnums=(0,))
@@ -79,11 +80,11 @@ class GaussianLikelihood(Likelihood):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, " n_sensors"]:
-        r"""``Sigma_obs^{-1} (y - M(theta))``, en espace **observation**.
+        r"""``Sigma_obs^{-1} (y - M(theta))``, in **observation** space.
 
-        Rend bien ``Sigma^{-1} r`` et non ``L^{-1} r`` : le résidu blanchi au
-        sens strict est ``L^{-1} r``, mais c'est ``Sigma^{-1} r`` dont le
-        gradient a besoin (``J^T Sigma^{-1} r``).
+        Returns ``Sigma^{-1} r`` and not ``L^{-1} r``: the residual whitened
+        in the strict sense is ``L^{-1} r``, but it is ``Sigma^{-1} r`` that
+        the gradient needs (``J^T Sigma^{-1} r``).
         """
         r = y - self.model(theta=theta, design=design)
         return jsp.linalg.cho_solve(self._obs_chol(design), r)
@@ -104,7 +105,7 @@ class GaussianLikelihood(Likelihood):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
-        """``-J^T Sigma_obs^{-1} J``, matrix-free. Rien n'est matérialisé."""
+        """``-J^T Sigma_obs^{-1} J``, matrix-free. Nothing is materialized."""
         A = self.model.jacobian_operator(theta=theta, design=design)
         chol = self._obs_chol(design)
 
@@ -112,9 +113,9 @@ class GaussianLikelihood(Likelihood):
             return -A.rmatvec(jsp.linalg.cho_solve(chol, A.matvec(v)))
 
         n = A.shape[1]
-        # matvec passé deux fois **à dessein** : (A^T S^-1 A)^T = A^T S^-1 A,
-        # l'opérateur est symétrique. Ce n'est pas le bug historique du
-        # rmatvec dupliqué -- ne pas « corriger ».
+        # matvec passed twice **on purpose**: (A^T S^-1 A)^T = A^T S^-1 A,
+        # the operator is symmetric. This is not the historical duplicated-rmatvec
+        # bug -- do not "fix" it.
         return LinearizedOperator(matvec, matvec, (n, n))
 
     @partial(jax.jit, static_argnums=(0, 4))
@@ -125,7 +126,7 @@ class GaussianLikelihood(Likelihood):
         design: Int[Array, " n_sensors"] | None = None,
         n_samples: int = 1,
     ) -> Float[Array, "n_samples n_sensors"]:
-        """``y ~ p(. | theta, design)``, via la factorisation partagée."""
+        """``y ~ p(. | theta, design)``, via the shared factorization."""
         mean = self.model(theta, design)
         L = jnp.tril(self._obs_chol(design)[0])
         z = jax.random.normal(key, (n_samples, mean.shape[0]))

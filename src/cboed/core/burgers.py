@@ -12,13 +12,14 @@ from cboed.core.selection import selection_operator
 
 
 class Burgers(ForwardModel):
-    r"""Burgers 1D visqueux, IMEX (diffusion implicite, advection explicite).
+    r"""1D viscous Burgers, IMEX (implicit diffusion, explicit advection).
 
     .. math::
         \partial_t u + \lambda u \partial_x u = \nu \partial_{xx} u
 
-    lambda_ : paramètre de non-linéarité (0 = diffusion pure, 1 = Burgers complet).
-    Carte G : theta (CI intérieure) -> état final. Non-linéaire sauf à lambda=0.
+    lambda_ : non-linearity parameter (0 = pure diffusion, 1 = full Burgers).
+    Map G : theta (interior initial condition) -> final state. Non-linear
+    except at lambda=0.
     """
 
     def __init__(self, diffusivity, lambda_, T, domain, nt, n):
@@ -63,7 +64,7 @@ class Burgers(ForwardModel):
         return 1
 
     def _diffusion_factor(self):
-        """Matrice implicite A (diffusion Crank-Nicolson), constante. Factorisée."""
+        """Implicit matrix A (Crank-Nicolson diffusion), constant. Factorized."""
         r = self.diffusivity * self.dt / (2 * self.dx**2)
         A = (
             jnp.diag((1 + 2 * r) * jnp.ones(self.n))
@@ -73,28 +74,28 @@ class Burgers(ForwardModel):
         return jsp.linalg.lu_factor(A), r
 
     def _nonlinear_flux(self, u):
-        r"""Terme d'advection non-linéaire λ u ∂ₓu, différences centrées.
+        r"""Non-linear advection term λ u ∂ₓu, centered differences.
 
-        Forme conservative : λ ∂ₓ(u²/2). Sur l'intérieur, bords nuls.
+        Conservative form: λ ∂ₓ(u²/2). On the interior, zero boundaries.
         """
         u_pad = jnp.zeros(self.n + 2).at[1:-1].set(u)
         flux = 0.5 * u_pad**2
-        # ∂ₓ centré : (flux[i+1] - flux[i-1]) / (2 dx)
+        # centered ∂ₓ : (flux[i+1] - flux[i-1]) / (2 dx)
         dflux = (flux[2:] - flux[:-2]) / (2 * self.dx)
         return self.lambda_ * dflux
 
     @partial(jax.jit, static_argnums=(0,))
     def solve(self, U0):
-        """Avance U0 (vecteur complet n+2) sur nt pas. IMEX."""
+        """Advances U0 (full n+2 vector) over nt steps. IMEX."""
         lu, r = self._diffusion_factor()
 
         def step(U, _):
             u_int = U[1:-1]
-            # diffusion explicite (partie CN droite) + advection non-linéaire explicite
+            # explicit diffusion (right-hand CN part) + explicit non-linear advection
             expl = (
                 u_int
-                + r * (U[2:] - 2 * u_int + U[:-2])  # diffusion explicite
-                - self.dt * self._nonlinear_flux(u_int)  # advection non-linéaire
+                + r * (U[2:] - 2 * u_int + U[:-2])  # explicit diffusion
+                - self.dt * self._nonlinear_flux(u_int)  # non-linear advection
             )
             u_new = jsp.linalg.lu_solve(lu, expl)
             U = U.at[1:-1].set(u_new)
@@ -116,7 +117,7 @@ class Burgers(ForwardModel):
         return y_full if design is None else y_full[design]
 
     def linearize(self, theta0: Float[Array, " n_param"]) -> LinearizedOperator:
-        """Opérateur tangent au point theta0. Dépend de theta0 (non-linéaire)."""
+        """Tangent operator at point theta0. Depends on theta0 (non-linear)."""
         y0, tangent = jax.linearize(self._forward, theta0)
         transpose_fn = jax.linear_transpose(tangent, theta0)
         return LinearizedOperator(

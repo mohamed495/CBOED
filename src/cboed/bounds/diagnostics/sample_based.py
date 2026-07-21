@@ -1,35 +1,39 @@
-r"""Matrices diagnostiques par échantillonnage -- §3.1.
+r"""Sample-based diagnostic matrices -- §3.1.
 
-Fournit ``Sigma_Y`` et ``Sigma_{Y|theta}``. **Sans alternative** : contrairement à
-``Sigma_signal``/``Sigma_noise``, qui ont deux voies (§3.2 et §3.3), ces deux-là ne
-s'obtiennent que par échantillonnage.
+Provides ``Sigma_Y`` and ``Sigma_{Y|theta}``. **No alternative**: unlike
+``Sigma_signal``/``Sigma_noise``, which have two routes (§3.2 and §3.3),
+these two can only be obtained by sampling.
 
-Estimateur par différences appariées
-------------------------------------
-Plutôt que la covariance empirique usuelle, on exploite
-``Cov(u(eta)) = ½ E[(u(eta) - u(eta'))^⊗2]`` pour ``eta'`` copie indépendante :
+Paired-difference estimator
+----------------------------
+Rather than the usual empirical covariance, we exploit
+``Cov(u(eta)) = ½ E[(u(eta) - u(eta'))^⊗2]`` for ``eta'`` an independent
+copy:
 
 .. math::
     \Sigma_Y^{(N)} = \Sigma_{\rm obs}
     + \frac{1}{2N} \sum_{i=1}^N (u(\eta^{(i)}) - u(\eta'^{(i)}))^{\otimes 2}
 
-Non biaisé, et sans moyenne empirique à retrancher -- donc sans la cancellation qui
-guette ``E[X X^T] - \bar{X}\bar{X}^T``. Coût : ``2N`` évaluations du modèle direct.
+Unbiased, and with no empirical mean to subtract -- hence no cancellation
+error of the kind that threatens ``E[X X^T] - \bar{X}\bar{X}^T``. Cost:
+``2N`` forward-model evaluations.
 
-``Sigma_{Y|theta}`` suit la même forme avec ``eta, eta'`` **conditionnellement
-indépendants sachant theta** (27) : ``eta ~ pi_eta``, ``theta ~ pi_{theta|eta}``,
-``eta' ~ pi_{eta|theta}``. Le dernier tirage est le goulot du papier -- il demande en
-général du MCMC. La remarque 3.1 le donne en forme fermée quand ``h`` est linéaire.
+``Sigma_{Y|theta}`` follows the same form with ``eta, eta'`` **conditionally
+independent given theta** (27): ``eta ~ pi_eta``, ``theta ~ pi_{theta|eta}``,
+``eta' ~ pi_{eta|theta}``. The last draw is the paper's bottleneck -- it
+generally requires MCMC. Remark 3.1 gives it in closed form when ``h`` is
+linear.
 
 Notes
 -----
-⚠️ **Pick-freeze (Rem. 3.2) ne s'applique pas au banc.** Il exige ``eta_1 ⊥ eta_2`` ;
-les deux moitiés du champ viennent du même GP, donc ``Sigma_{theta eta} ≠ 0``. C'est
-la remarque 3.1 qui s'applique.
+⚠️ **Pick-freeze (Rem. 3.2) does not apply to this test bench.** It requires
+``eta_1 ⊥ eta_2``; the two halves of the field come from the same GP, so
+``Sigma_{theta eta} ≠ 0``. It is Remark 3.1 that applies here.
 
-⚠️ Contrairement à Prop. 4, cette voie est **régulière en ``Sigma_xi = 0``** : la
-remarque 3.1 reste valide sans bruit (``eta|theta`` dégénère proprement en ``delta``).
-Là où la voie gradient a une limite singulière, la voie échantillon n'en a pas.
+⚠️ Unlike Prop. 4, this route is **regular at ``Sigma_xi = 0``**: Remark 3.1
+stays valid without noise (``eta|theta`` degenerates cleanly into a
+``delta``). Where the gradient route has a singular limit, the sample route
+does not.
 """
 
 from functools import partial
@@ -48,7 +52,7 @@ from cboed.priors.base import Prior
 def _paired_covariance(
     diffs: Float[Array, "n_samples n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``(1/2N) sum_i d_i d_i^T`` -- l'estimateur (26)/(27)."""
+    r"""``(1/2N) sum_i d_i d_i^T`` -- the estimator (26)/(27)."""
     out = 0.5 * diffs.T @ diffs / diffs.shape[0]
     return 0.5 * (out + out.T)
 
@@ -56,12 +60,12 @@ def _paired_covariance(
 @jax.jit
 @jaxtyped(typechecker=beartype)
 def _psd_sqrt(A: Float[Array, "n n"]) -> Float[Array, "n n"]:
-    r"""Racine PSD par ``eigh``, valeurs propres écrêtées à zéro.
+    r"""PSD square root via ``eigh``, eigenvalues clipped to zero.
 
-    Pas ``cholesky`` : la covariance postérieure de la remarque 3.1 **dégénère** en
-    zéro quand ``Sigma_xi -> 0`` et ``B = I`` (``eta|theta`` devient un Dirac). C'est
-    un cas nominal, pas un accident -- et LAPACK rend des ``nan`` sur une PSD
-    singulière.
+    Not ``cholesky``: the posterior covariance of Remark 3.1 **degenerates**
+    to zero when ``Sigma_xi -> 0`` and ``B = I`` (``eta|theta`` becomes a
+    Dirac). This is a nominal case, not an accident -- and LAPACK returns
+    ``nan`` on a singular PSD matrix.
     """
     ev, P = jnp.linalg.eigh(A)
     return P @ jnp.diag(jnp.sqrt(jnp.clip(ev, 0.0, None)))
@@ -76,17 +80,17 @@ def sample_Sigma_Y(
     key: PRNGKeyArray,
     n_samples: int,
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma_Y = Sigma_obs + Cov(u(eta))`` -- équation (26).
+    r"""``Sigma_Y = Sigma_obs + Cov(u(eta))`` -- equation (26).
 
     Parameters
     ----------
     u : Callable
-        Modèle direct ``eta -> observations``, sans design.
+        Forward model ``eta -> observations``, without a design.
     prior_eta : Prior
     Sigma_obs : Float[Array, "n_obs n_obs"]
     key : PRNGKeyArray
     n_samples : int
-        Nombre de **paires**. Coût : ``2 * n_samples`` évaluations de ``u``.
+        Number of **pairs**. Cost: ``2 * n_samples`` evaluations of ``u``.
     """
     k1, k2 = jax.random.split(key)
     eta = prior_eta.sample(k1, n_samples)
@@ -111,25 +115,25 @@ def sample_Sigma_Y_given_theta(
     Parameters
     ----------
     B : Float[Array, "n_param n_eta"]
-        Jacobienne de ``h``, **supposée constante** : la forme fermée de la remarque
-        3.1 n'existe que pour ``h`` linéaire. Pour ``h`` non linéaire, il faut du
-        MCMC ciblant ``pi_{eta|theta}`` -- hors périmètre.
+        Jacobian of ``h``, **assumed constant**: the closed form of Remark
+        3.1 only exists for linear ``h``. For non-linear ``h``, MCMC
+        targeting ``pi_{eta|theta}`` is required -- out of scope here.
     Sigma_xi : Float[Array, "n_param n_param"]
-        Covariance de ``xi``. **Peut être nulle** : cf. Rem. 3.1.
+        Covariance of ``xi``. **Can be zero**: see Rem. 3.1.
 
     Notes
     -----
-    Le gain de Kalman ``K = Sigma_eta B^T (B Sigma_eta B^T + Sigma_xi)^{-1}`` et la
-    covariance postérieure ``Sigma_pos = Sigma_eta - K B Sigma_eta`` **ne dépendent
-    pas de theta** : factorisés une fois, hors de la boucle. Seule la moyenne en
-    dépend.
+    The Kalman gain ``K = Sigma_eta B^T (B Sigma_eta B^T + Sigma_xi)^{-1}``
+    and the posterior covariance ``Sigma_pos = Sigma_eta - K B Sigma_eta``
+    **do not depend on theta**: factorized once, outside the loop. Only the
+    mean depends on it.
     """
     k_eta, k_xi, k_pos = jax.random.split(key, 3)
 
     Sigma_eta = prior_eta.Sigma()
     m_eta = prior_eta.mu
 
-    # -- Rem. 3.1 : eta|theta gaussien, covariance independante de theta ----
+    # -- Rem. 3.1: eta|theta Gaussian, covariance independent of theta ------
     S = B @ Sigma_eta @ B.T + Sigma_xi
     K = jnp.linalg.solve(S, B @ Sigma_eta).T  # (q, d)
     Sigma_pos = Sigma_eta - K @ B @ Sigma_eta
@@ -157,12 +161,12 @@ def sample_diagnostics_standard(
     key: PRNGKeyArray,
     n_samples: int,
 ) -> tuple[Float[Array, "n_obs n_obs"], Float[Array, "n_obs n_obs"]]:
-    r"""``(Sigma_Y, Sigma_Y_given_theta)`` dans le cas standard ``Y = u(theta) + eps``.
+    r"""``(Sigma_Y, Sigma_Y_given_theta)`` in the standard case ``Y = u(theta) + eps``.
 
-    Prop. 2 avec ``h = id`` et ``xi = 0`` donne ``E[Cov(u(theta)|theta)] = 0``, donc
-    ``Sigma_Y_given_theta = Sigma_obs`` **exactement**. Aucun échantillonnage : c'est
-    une égalité à poser, pas une limite à approcher.
+    Prop. 2 with ``h = id`` and ``xi = 0`` gives ``E[Cov(u(theta)|theta)] = 0``,
+    hence ``Sigma_Y_given_theta = Sigma_obs`` **exactly**. No sampling
+    needed: this is an equality to posit, not a limit to approximate.
 
-    Symétrique de ``gradient_diagnostics_standard``, et pour la même raison.
+    Symmetric to ``gradient_diagnostics_standard``, and for the same reason.
     """
     return sample_Sigma_Y(u, prior_theta, Sigma_obs, key, n_samples), Sigma_obs

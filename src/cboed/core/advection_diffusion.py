@@ -13,11 +13,11 @@ from cboed.core.selection import selection_operator
 
 
 class AdvectionDiffusion(ForwardModel):
-    """Advection-diffusion 1D, Crank-Nicolson, bords de Dirichlet nuls.
+    """1D advection-diffusion, Crank-Nicolson, zero Dirichlet boundaries.
 
-    Carte directe G : theta -> etat final, avec theta = condition initiale
-    interieure (n degres de liberte). La carte etant lineaire, jacobian rend
-    l'operateur G comme objet matrix-free (jamais materialise).
+    Forward map G : theta -> final state, with theta = interior initial
+    condition (n degrees of freedom). Since the map is linear, jacobian
+    returns operator G as a matrix-free object (never materialized).
     """
 
     def __init__(
@@ -34,7 +34,7 @@ class AdvectionDiffusion(ForwardModel):
         self.n = n  # number of interior points
 
     # ------------------------------------------------------------------
-    # Hyperparametres (ranges par la base dans self._hyperparameters)
+    # Hyperparameters (stored by the base class in self._hyperparameters)
     # ------------------------------------------------------------------
 
     @property
@@ -62,7 +62,7 @@ class AdvectionDiffusion(ForwardModel):
         return self.T / self.nt
 
     # ------------------------------------------------------------------
-    # Interface ForwardModel
+    # ForwardModel interface
     # ------------------------------------------------------------------
 
     @property
@@ -84,8 +84,8 @@ class AdvectionDiffusion(ForwardModel):
         theta: Float[Array, " n_parameters"],
         design: Int[Array, " n_obs"] | None = None,
     ) -> Float[Array, " ???"]:
-        """G(θ) : état final observé. Sans design, l'état complet Y = u(θ)."""
-        y_full = self._forward(theta)  # Y ∈ ℝᵖ, état complet
+        """G(θ) : observed final state. Without a design, the full state Y = u(θ)."""
+        y_full = self._forward(theta)  # Y ∈ ℝᵖ, full state
         if design is None:
             return y_full
         return y_full[design]  # Yₘ = Wₘᵀ Y ∈ ℝᵐ
@@ -95,21 +95,21 @@ class AdvectionDiffusion(ForwardModel):
         theta: Float[Array, " n_parameters"],
         design: Float[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
-        """dG/dtheta comme opérateur matrix-free.
+        """dG/dtheta as a matrix-free operator.
 
         Parameters
         ----------
         theta : Float[Array, " n_parameters"]
-            Point d'évaluation de la jacobienne.
+            Point at which the Jacobian is evaluated.
 
         Returns
         -------
         LinearizedOperator
-            Opérateur tangent, jamais matérialisé.
+            Tangent operator, never materialized.
 
         Notes
         -----
-        Since the map is linear étant, the result don't realy on theta.
+        Since the map is linear, the result does not depend on theta.
 
         Example
         -----
@@ -133,14 +133,14 @@ class AdvectionDiffusion(ForwardModel):
         theta: Float[Array, " n_parameters"],
         design: Float[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_obs n_parameters"]:
-        """dG/dtheta comme operateur matrix-free (jamais materialise).
-        Arguments :
+        """dG/dtheta as a matrix-free operator (never materialized).
+        Arguments:
             theta : scalar or ndarray
                 where to evaluate the Jacobian
         return:
             J_theta(theta)
 
-        Exemple :
+        Example:
             A [[1,2],
                [0,1]]
             x = [0,0]
@@ -156,20 +156,20 @@ class AdvectionDiffusion(ForwardModel):
         return jnp.asarray(jax.vmap(op.matvec)(jnp.eye(self.n_parameters)).T)
 
     # ------------------------------------------------------------------
-    # Coeur numerique : pas de Crank-Nicolson
+    # Numerical core: Crank-Nicolson step
     # ------------------------------------------------------------------
 
     def _factor(
         self,
     ) -> tuple[tuple[Float[Array, "n n"], Int[Array, " n"]], Float[Array, " 3"]]:
-        """Construit A et le noyau explicite une fois. A est factorise (LU)."""
+        """Builds A and the explicit kernel once. A is factorized (LU)."""
         r = self.diffusivity * self.dt / (2 * self.dx**2)
         c = self.velocity * self.dt / (4 * self.dx)
 
-        # Stencil du membre de droite (ordre inverse pour convolve)
+        # Right-hand-side stencil (reversed order for convolve)
         kernel_B = jnp.array([r - c, 1 - 2 * r, r + c])
 
-        # Matrice implicite A
+        # Implicit matrix A
         A = (
             jnp.diag((1 + 2 * r) * jnp.ones(self.n))
             + jnp.diag(-(r - c) * jnp.ones(self.n - 1), 1)
@@ -179,7 +179,7 @@ class AdvectionDiffusion(ForwardModel):
 
     @partial(jax.jit, static_argnums=(0,))
     def solve(self, U0: Float[Array, " n_plus_2"]) -> Float[Array, " n_plus_2"]:
-        """Avance U0 (vecteur complet) sur nt pas. A factorise une fois."""
+        """Advances U0 (full vector) over nt steps. A is factorized once."""
         lu, kernel_B = self._factor()
 
         def step(U, _):
@@ -191,23 +191,24 @@ class AdvectionDiffusion(ForwardModel):
         return U_final
 
     # ------------------------------------------------------------------
-    # Carte differentiable et operateur linearise
+    # Differentiable map and linearized operator
     # ------------------------------------------------------------------
 
     def _forward(self, theta: Float[Array, " n_param"]) -> Float[Array, " n_obs"]:
-        """Carte theta -> etat final, sur l'interieur (n -> n).
+        """Map theta -> final state, on the interior (n -> n).
 
-        Pad la CI interieure avec des bords nuls, avance, puis depad.
+        Pads the interior initial condition with zero boundaries, advances,
+        then strips the padding.
         """
         U0 = jnp.zeros(self.n + 2).at[1:-1].set(theta)
         return self.solve(U0)[1:-1]
 
     def linearize(self, theta0: Float[Array, " n_param"]) -> LinearizedOperator:
-        """Operateur tangent de _forward au point theta0.
+        """Tangent operator of _forward at point theta0.
 
-        Carte lineaire ici : independant de theta0 (jnp.zeros(n) convient).
-        Une seule passe forward (jax.linearize) ; l'adjoint est la transposee
-        de la tangente (toujours licite : la tangente est lineaire).
+        Linear map here: independent of theta0 (jnp.zeros(n) works fine).
+        A single forward pass (jax.linearize); the adjoint is the transpose
+        of the tangent (always valid: the tangent is linear).
         """
         y0, tangent = jax.linearize(self._forward, theta0)
         transpose_fn = jax.linear_transpose(tangent, theta0)

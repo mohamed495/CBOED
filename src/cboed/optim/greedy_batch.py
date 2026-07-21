@@ -5,11 +5,11 @@ from cboed.optim.base import Optimizer, Result
 
 
 class GreedyBatchReopt(Optimizer):
-    """Greedy avec réoptimisation complète à chaque étape.
+    """Greedy with full reoptimization at each step.
 
-    À chaque ajout, réexamine tout le design : pour chaque capteur déjà
-    choisi, teste s'il vaut mieux le remplacer par un candidat libre.
-    Coût ~k* le greedy simple, corrige les erreurs d'étapes antérieures.
+    On each addition, re-examines the whole design: for each sensor already
+    chosen, tests whether it would be better to replace it with a free
+    candidate. Cost ~k times plain greedy, corrects mistakes from earlier steps.
     """
 
     def run(self, theta, n_sensors, n_candidates) -> Result:
@@ -17,11 +17,11 @@ class GreedyBatchReopt(Optimizer):
         scores = []
 
         for _ in range(n_sensors):
-            # étape greedy normale : ajouter le meilleur candidat
+            # normal greedy step: add the best candidate
             best_i = self._best_addition(theta, selected, n_candidates)
             selected.append(best_i)
 
-            # réoptimisation : chaque position peut être échangée
+            # reoptimization: every position can be swapped
             selected = self._reoptimize(theta, selected, n_candidates)
             scores.append(float(self.criterion.evaluate(theta, jnp.array(selected))))
 
@@ -38,7 +38,7 @@ class GreedyBatchReopt(Optimizer):
         return best_i
 
     def _reoptimize(self, theta, selected, n_candidates):
-        """Passe de swap : remplacer chaque capteur s'il existe mieux."""
+        """Swap pass: replace each sensor if something better exists."""
         improved = True
         while improved:
             improved = False

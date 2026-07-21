@@ -6,18 +6,17 @@ from jaxtyping import Array, Float, Int
 
 
 def chunked_vmap(f, *xs, chunk_size: int | None = None):
-    """``vmap(f)(*xs)``, ou ``lax.map`` par lots de ``chunk_size`` si fourni.
+    """``vmap(f)(*xs)``, or ``lax.map`` in batches of ``chunk_size`` if given.
 
-    Les estimateurs NMC vectorisent une boucle externe (``n_outer``) dont
-    chaque élément lance déjà une boucle interne vectorisée (``n_inner``) --
-    XLA fusionne les deux en un batch effectif ``n_outer x n_inner``, et à
-    l'échelle réelle (champ complet, gros ``n_outer``/``n_inner``) ce batch
-    dépasse largement la mémoire GPU disponible. ``chunk_size`` borne la
-    mémoire de crête à ``chunk_size x n_inner`` en traitant l'axe externe par
-    lots séquentiels (``lax.map``) plutôt qu'en un seul ``vmap`` -- plus lent,
-    mais indispensable dès que ``n_outer x n_inner`` ne tient plus en mémoire.
-    ``None`` (défaut) : un seul ``vmap``, comme avant -- pas de surcoût aux
-    petites échelles (tests, dev).
+    NMC estimators vectorize an outer loop (``n_outer``) whose every element
+    already launches a vectorized inner loop (``n_inner``) -- XLA fuses the
+    two into an effective ``n_outer x n_inner`` batch, and at real scale (full
+    field, large ``n_outer``/``n_inner``) this batch far exceeds available GPU
+    memory. ``chunk_size`` bounds peak memory to ``chunk_size x n_inner`` by
+    processing the outer axis in sequential batches (``lax.map``) instead of a
+    single ``vmap`` -- slower, but necessary as soon as ``n_outer x n_inner``
+    no longer fits in memory. ``None`` (default): a single ``vmap``, as
+    before -- no overhead at small scales (tests, dev).
     """
     if chunk_size is None:
         return jax.vmap(f)(*xs)
@@ -27,7 +26,7 @@ def chunked_vmap(f, *xs, chunk_size: int | None = None):
 
 
 class EIGEstimator(ABC):
-    """Estimateur d'EIG. Les sous-classes décident *comment* l'approximer."""
+    """EIG estimator. Subclasses decide *how* to approximate it."""
 
     def __init__(self, **hyperparameters):
         self._hyperparameters = hyperparameters

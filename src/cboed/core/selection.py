@@ -1,4 +1,4 @@
-# core/selection.py  (ou dans linear_operator.py)
+# core/selection.py  (or in linear_operator.py)
 import jax.numpy as jnp
 from jaxtyping import Array, Float, Int
 
@@ -6,10 +6,10 @@ from cboed.core.linear_operator import LinearizedOperator
 
 
 def selection_operator(indices: Int[Array, " n_obs"], n: int) -> LinearizedOperator:
-    """H(ξ) : Rⁿ → R^{n_obs}, extrait les composantes observées.
+    """H(ξ) : Rⁿ → R^{n_obs}, extracts the observed components.
 
-    matvec  : état complet → observations (u ↦ u[indices])
-    rmatvec : observations → état complet (scatter, adjoint)
+    matvec  : full state → observations (u ↦ u[indices])
+    rmatvec : observations → full state (scatter, adjoint)
     """
 
     def matvec(u: Float[Array, " n"]) -> Float[Array, " n_obs"]:

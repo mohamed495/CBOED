@@ -1,12 +1,12 @@
-"""§3.1 : les diagnostiques par échantillonnage.
+"""§3.1: sampling-based diagnostics.
 
-Oracles indépendants, tous à `lambda=0` où le modèle est linéaire :
+Independent oracles, all at `lambda=0` where the model is linear:
 
-* `Sigma_Y`        contre `Sigma_obs + A Sigma_eta A^T`  (24)
-* `Sigma_{Y|theta}` contre `Sigma_obs + A (Sigma_eta^{-1} + B^T Sigma_xi^{-1} B)^{-1} A^T`  (24)
+* `Sigma_Y`        against `Sigma_obs + A Sigma_eta A^T`  (24)
+* `Sigma_{Y|theta}` against `Sigma_obs + A (Sigma_eta^{-1} + B^T Sigma_xi^{-1} B)^{-1} A^T`  (24)
 
-Aucun code commun : d'un côté du Monte-Carlo sur le modèle direct, de l'autre de
-l'algèbre linéaire sur la jacobienne.
+No shared code: on one side Monte Carlo on the forward model, on the other
+linear algebra on the Jacobian.
 """
 
 import jax.numpy as jnp
@@ -36,7 +36,7 @@ def bench():
 
 
 def test_Sigma_Y_matches_linear_closed_form(bench):
-    """(26) contre `Sigma_obs + A Sigma_eta A^T`. Erreur MC en O(1/sqrt(N))."""
+    """(26) against `Sigma_obs + A Sigma_eta A^T`. MC error in O(1/sqrt(N))."""
     model, prior, Sigma_obs = bench
 
     def u(eta):
@@ -53,7 +53,7 @@ def test_Sigma_Y_matches_linear_closed_form(bench):
 
 @pytest.mark.parametrize("sigma_xi", [1e-1, 1e-2])
 def test_Sigma_Y_given_theta_matches_linear_closed_form(bench, sigma_xi):
-    """(27) via Rem. 3.1 contre la forme fermée (24) -- oracle indépendant."""
+    """(27) via Rem. 3.1 against the closed form (24) -- independent oracle."""
     model, prior, Sigma_obs = bench
     B = jnp.eye(N)
     Sigma_xi = sigma_xi * jnp.eye(N)
@@ -67,14 +67,14 @@ def test_Sigma_Y_given_theta_matches_linear_closed_form(bench, sigma_xi):
     exact = Sigma_obs + A @ jnp.linalg.solve(M, A.T)
 
     rel = jnp.linalg.norm(sampled - exact) / jnp.linalg.norm(exact)
-    print(f"Sigma_xi={sigma_xi:.0e} -> erreur relative = {rel:.3e}")
+    print(f"Sigma_xi={sigma_xi:.0e} -> relative error = {rel:.3e}")
     assert rel < 0.05
 
 
 def test_law_of_total_variance(bench):
-    """`Sigma_Y ⪰ Sigma_{Y|theta}` : conditionner ne peut qu'enlever de la variance.
+    """`Sigma_Y ⪰ Sigma_{Y|theta}`: conditioning can only remove variance.
 
-    `Cov(u) = E[Cov(u|theta)] + Cov(E[u|theta])`, second terme PSD.
+    `Cov(u) = E[Cov(u|theta)] + Cov(E[u|theta])`, second term PSD.
     """
     model, prior, Sigma_obs = bench
 
@@ -90,12 +90,12 @@ def test_law_of_total_variance(bench):
 
 
 def test_zero_Sigma_xi_degenerates_to_Sigma_obs(bench):
-    """⭐ `Sigma_xi = 0` exactement : Rem. 3.1 y est **régulière**.
+    """⭐ `Sigma_xi = 0` exactly: Rem. 3.1 is **regular** there.
 
-    Là où Prop. 4 a une limite singulière (`J(h) = Sigma_xi^{-1}` explose), la voie
-    échantillon accepte `Sigma_xi = 0` : `eta|theta` dégénère en Dirac, donc
-    `eta' = eta`, donc les différences appariées sont **exactement nulles** et
-    `Sigma_{Y|theta} = Sigma_obs`. C'est le cas standard, retrouvé sans détour.
+    Where Prop. 4 has a singular limit (`J(h) = Sigma_xi^{-1}` blows up), the
+    sampling path accepts `Sigma_xi = 0`: `eta|theta` degenerates to a Dirac,
+    so `eta' = eta`, so the paired differences are **exactly zero** and
+    `Sigma_{Y|theta} = Sigma_obs`. This is the standard case, recovered directly.
     """
     model, prior, Sigma_obs = bench
 
@@ -109,7 +109,7 @@ def test_zero_Sigma_xi_degenerates_to_Sigma_obs(bench):
 
 
 def test_standard_entry_point_poses_Sigma_obs(bench):
-    """Symétrique de `gradient_diagnostics_standard` : posé, pas échantillonné."""
+    """Symmetric to `gradient_diagnostics_standard`: posited, not sampled."""
     model, prior, Sigma_obs = bench
 
     def u(eta):
@@ -120,10 +120,11 @@ def test_standard_entry_point_poses_Sigma_obs(bench):
 
 
 def test_paired_estimator_matches_empirical_covariance(bench):
-    """L'estimateur apparié (26) contre `jnp.cov` -- deux estimateurs du même objet.
+    """The paired estimator (26) against `jnp.cov` -- two estimators of the same object.
 
-    L'apparié évite de retrancher une moyenne empirique, donc la cancellation qui
-    guette `E[XX^T] - mean mean^T`. Les deux doivent converger au même endroit.
+    The paired estimator avoids subtracting an empirical mean, so it avoids the
+    cancellation that threatens `E[XX^T] - mean mean^T`. Both must converge to
+    the same place.
     """
     import jax
 

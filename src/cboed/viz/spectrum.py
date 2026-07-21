@@ -1,15 +1,15 @@
-r"""Quasi-optimalité -- Proposition 1.
+r"""Quasi-optimality -- Proposition 1.
 
-L'identité qui structure tout :
+The identity that structures everything:
 
 .. math::
     \sum_i (\ln\alpha_i + \ln\beta_i)
 
-Les constantes de sous-optimalité utilisent ce même spectre mais selon
-deux lectures différentes :
-- l'incrémental contrôle les modes non encore sélectionnés ;
-- le conservatif utilise une somme sur les d-m premiers modes afin de
-  fournir une borne indépendante du choix des capteurs.
+The sub-optimality constants use this same spectrum but read it in two
+different ways:
+- the incremental one controls the modes not yet selected;
+- the conservative one uses a sum over the first d-m modes in order to
+  provide a bound independent of the choice of sensors.
 """
 
 import matplotlib.pyplot as plt
@@ -19,13 +19,14 @@ from cboed.viz.style import COLORS
 
 
 def plot_alpha_spectrum(alpha, beta=None, effective_rank=None, ax=None, title=""):
-    """Spectre généralisé, échelle log.
+    """Generalized spectrum, log scale.
 
-    ``alpha_i, beta_i >= 1`` (Prop. 1) : la ligne à 1 marque le plancher. Un mode à
-    ``alpha_i = 1`` ne contribue **pas** au gap -- il est gaussien.
+    ``alpha_i, beta_i >= 1`` (Prop. 1): the line at 1 marks the floor. A
+    mode at ``alpha_i = 1`` does **not** contribute to the gap -- it is
+    Gaussian.
 
-    Un spectre **concentré** (quelques modes >> 1, le reste à 1) veut dire que la
-    non-gaussianité vit dans peu de directions.
+    A **concentrated** spectrum (a few modes >> 1, the rest at 1) means the
+    non-Gaussianity lives in few directions.
     """
     ax = ax or plt.subplots(figsize=(6, 3.4))[1]
     alpha = np.asarray(alpha)
@@ -57,13 +58,13 @@ def plot_alpha_spectrum(alpha, beta=None, effective_rank=None, ax=None, title=""
         ax.text(
             effective_rank + 1,
             ax.get_ylim()[1] * 0.5,
-            f"rang effectif = {effective_rank}",
+            f"effective rank = {effective_rank}",
             fontsize=7,
             color=COLORS["truth"],
         )
 
-    ax.set_xlabel("indice du mode")
-    ax.set_ylabel("valeur propre generalisee")
+    ax.set_xlabel("mode index")
+    ax.set_ylabel("generalized eigenvalue")
     ax.legend(fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
@@ -71,14 +72,15 @@ def plot_alpha_spectrum(alpha, beta=None, effective_rank=None, ax=None, title=""
 
 
 def plot_suboptimality(ms, inc, cons, eig_scale=None, ax=None, title=""):
-    """Les deux constantes de Prop. 1 en fonction de ``m``.
+    """The two constants of Prop. 1 as a function of ``m``.
 
     Parameters
     ----------
     eig_scale : float or None
-        Ordre de grandeur de l'EIG. **À fournir** : une constante de sous-optimalité
-        n'a de sens que rapportée à ce qu'elle borne. Si elle la dépasse, la garantie
-        ``EIG >= max EIG - constante`` est vide, et la figure doit le montrer.
+        Order of magnitude of the EIG. **Must be supplied**: a
+        sub-optimality constant is only meaningful relative to what it
+        bounds. If it exceeds that quantity, the guarantee ``EIG >= max EIG
+        - constant`` is vacuous, and the figure must show it.
     """
     ax = ax or plt.subplots(figsize=(6, 3.4))[1]
     ax.plot(
@@ -97,7 +99,7 @@ def plot_suboptimality(ms, inc, cons, eig_scale=None, ax=None, title=""):
         ms=3,
         lw=1.6,
         color=COLORS["conservative"],
-        label=r"conservatif  $\sum_{i\leq p-m}$",
+        label=r"conservative  $\sum_{i\leq p-m}$",
     )
 
     if eig_scale is not None:
@@ -106,20 +108,20 @@ def plot_suboptimality(ms, inc, cons, eig_scale=None, ax=None, title=""):
             color=COLORS["exact"],
             lw=1.2,
             ls=":",
-            label=f"echelle de l'EIG ({eig_scale:.1f} nats)",
+            label=f"EIG scale ({eig_scale:.1f} nats)",
         )
         ax.fill_between(ms, eig_scale, max(max(inc), max(cons)), color="0.85", alpha=0.5, zorder=0)
         ax.text(
             ms[len(ms) // 2],
             eig_scale * 1.05,
-            "garantie vide",
+            "vacuous guarantee",
             fontsize=7,
             style="italic",
             color="0.4",
         )
 
-    ax.set_xlabel("nombre de capteurs $m$")
-    ax.set_ylabel("sous-optimalite (nats)")
+    ax.set_xlabel("number of sensors $m$")
+    ax.set_ylabel("sub-optimality (nats)")
     ax.legend(fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
@@ -127,10 +129,11 @@ def plot_suboptimality(ms, inc, cons, eig_scale=None, ax=None, title=""):
 
 
 def plot_gap_decomposition(alpha, beta, title=""):
-    """Contribution cumulée de chaque mode au gap.
+    """Cumulative contribution of each mode to the gap.
 
-    La courbe atteint 100 % au rang effectif. Un coude marqué = gap concentré ; une
-    droite = gap étalé, et rien à gagner en sélectionnant des modes.
+    The curve reaches 100% at the effective rank. A sharp elbow = concentrated
+    gap; a straight line = spread-out gap, and nothing to be gained by
+    selecting modes.
     """
     terms = 0.5 * (np.log(np.asarray(alpha)) + np.log(np.asarray(beta)))
     total = terms.sum()
@@ -144,22 +147,22 @@ def plot_gap_decomposition(alpha, beta, title=""):
         color=COLORS["Sigma_signal"],
     )
     ax.axhline(90, color="0.6", lw=0.8, ls=":")
-    ax.set_xlabel("nombre de modes")
-    ax.set_ylabel("% du gap explique")
+    ax.set_xlabel("number of modes")
+    ax.set_ylabel("% of gap explained")
     ax.set_ylim(0, 105)
     if title:
-        ax.set_title(f"{title}   (gap total = {total:.3f} nats)", fontsize=10)
+        ax.set_title(f"{title}   (total gap = {total:.3f} nats)", fontsize=10)
     fig.tight_layout()
     return fig
 
 
 def plot_log_generalized_spectrum(alpha, beta, title=""):
-    """``log(alpha_i)`` et ``log(beta_i)`` superposes, echelle lineaire.
+    """``log(alpha_i)`` and ``log(beta_i)`` overlaid, linear scale.
 
-    Equivalent visuel de :func:`plot_alpha_spectrum` en ``semilogy`` -- les deux
-    tracent la meme quantite sur des axes differents. Celle-ci l'exprime en nats
-    directement additifs (Prop. 1 : le gap est une somme de ces log-valeurs), sans
-    le marqueur de rang effectif.
+    Visual equivalent of :func:`plot_alpha_spectrum` in ``semilogy`` -- both
+    plot the same quantity on different axes. This one expresses it in
+    directly additive nats (Prop. 1: the gap is a sum of these log-values),
+    without the effective-rank marker.
     """
     fig, ax = plt.subplots(figsize=(6, 3.4))
 
@@ -185,8 +188,8 @@ def plot_log_generalized_spectrum(alpha, beta, title=""):
     )
     ax.axhline(0, color="0.6", lw=0.8, ls=":")
 
-    ax.set_xlabel("indice du mode")
-    ax.set_ylabel("log-valeur propre generalisee (nats)")
+    ax.set_xlabel("mode index")
+    ax.set_ylabel("generalized log-eigenvalue (nats)")
     ax.legend(fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
@@ -195,15 +198,15 @@ def plot_log_generalized_spectrum(alpha, beta, title=""):
 
 
 def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
-    r"""``log(alpha_i)``, ``log(beta_i)`` et leur somme -- une courbe par ``lambda``.
+    r"""``log(alpha_i)``, ``log(beta_i)`` and their sum -- one curve per ``lambda``.
 
-    Trois panneaux : la non-linearite (``lambda`` croissant) deplace le spectre
-    vers le haut (Prop. 1, le gap croit) -- se lit directement ici.
+    Three panels: growing non-linearity (increasing ``lambda``) shifts the
+    spectrum upward (Prop. 1, the gap grows) -- directly visible here.
 
     Parameters
     ----------
     alpha_by_lambda, beta_by_lambda : dict[float, array]
-        ``{lambda: alpha_i}`` -- memes cles dans les deux dicts.
+        ``{lambda: alpha_i}`` -- same keys in both dicts.
     """
     lams = sorted(alpha_by_lambda)
     cmap = plt.get_cmap("viridis")
@@ -223,7 +226,7 @@ def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
     axes[1].set_ylabel(r"$\log(\beta_i)$")
     axes[2].set_ylabel(r"$\log(\alpha_i) + \log(\beta_i)$")
     for ax in axes:
-        ax.set_xlabel("indice du mode")
+        ax.set_xlabel("mode index")
         ax.axhline(0, color="0.6", lw=0.8, ls=":")
         ax.legend(fontsize=7)
     if title:

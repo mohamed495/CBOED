@@ -57,7 +57,7 @@ def test_log_likelihood_quadratic(setup: Setup) -> None:
     key = jax.random.key(42)
     r = jax.random.multivariate_normal(
         key=key, mean=jnp.zeros(setup.model.n), cov=setup.likelihood.Sigma_obs
-    )  # residu impose
+    )  # imposed residual
 
     y = setup.model(theta=theta) + r
 
@@ -73,7 +73,7 @@ def test_jacobian_operator(setup: Setup) -> None:
 
 
 def test_jacobian_dense_matches_operator(setup: Setup) -> None:
-    """`jacobian` matérialise `jacobian_operator` — colonnes, pas lignes."""
+    """`jacobian` materializes `jacobian_operator` -- columns, not rows."""
     theta = jnp.arange(1.0, setup.model.n + 1)
     op = setup.likelihood.jacobian_operator(theta=theta)
     J = setup.likelihood.jacobian(theta=theta)
@@ -86,7 +86,7 @@ def test_whitened_residual(setup: Setup) -> None:
     key = jax.random.key(42)
     r = jax.random.multivariate_normal(
         key=key, mean=jnp.zeros(setup.model.n), cov=setup.likelihood.Sigma_obs
-    )  # residu impose
+    )  # imposed residual
 
     y = setup.model(theta=theta) + r
     expected = jsp.linalg.cho_solve(
@@ -113,7 +113,7 @@ def test_grad_log_likelihood(setup):
 def test_hessian(setup):
     theta = jnp.arange(1.0, setup.model.n + 1)
     A = setup.model.jacobian(theta)
-    Sigma_inv = jnp.linalg.inv(setup.likelihood.Sigma_obs)  # inversion directe
+    Sigma_inv = jnp.linalg.inv(setup.likelihood.Sigma_obs)  # direct inversion
     expected = -A.T @ Sigma_inv @ A
     assert jnp.allclose(expected, setup.likelihood.hessian(theta))
 
@@ -170,7 +170,7 @@ def test_sample_moments(setup):
     expected_mean = setup.model(theta)
     expected_cov = setup.likelihood.Sigma_obs
 
-    # erreur-type de la moyenne : sigma / sqrt(n)
+    # standard error of the mean: sigma / sqrt(n)
     tol_mean = 5.0 * jnp.sqrt(jnp.diag(expected_cov) / n)
     assert jnp.all(jnp.abs(mean_hat - expected_mean) < tol_mean)
 
@@ -179,8 +179,8 @@ def test_sample_moments(setup):
 
 @pytest.mark.slow("n")
 def test_sample_matches_log_likelihood(setup):
-    """La log-vraisemblance empirique moyenne doit approcher l'entropie
-    différentielle négative de la gaussienne."""
+    """The average empirical log-likelihood must approach the negative
+    differential entropy of the Gaussian."""
     theta = jnp.ones(setup.model.n)
     n_samples = 50_000
     y = setup.likelihood.sample(jax.random.key(0), theta, n_samples=n_samples)
@@ -196,9 +196,9 @@ def test_sample_matches_log_likelihood(setup):
 def test_log_likelihood_with_design(setup):
     theta = setup.prior.mu
     design = jnp.array([0, 2])
-    y = setup.model(theta, design)  # sans bruit → résidu nul
+    y = setup.model(theta, design)  # no noise -> zero residual
     ll = setup.likelihood.log_likelihood(y, theta, design)
-    # résidu nul → quad = 0 → ll = -½(m log2π + logdet)
+    # zero residual -> quad = 0 -> ll = -½(m log2π + logdet)
     m = 2
     chol = setup.likelihood._obs_chol(design)
     logdet = 2.0 * jnp.sum(jnp.log(jnp.diag(chol[0])))
@@ -211,28 +211,28 @@ def test_all_methods_consistent_under_design(setup):
     design = jnp.array([0, 2])
     key = jax.random.key(0)
 
-    # toutes ces quantités doivent avoir la bonne forme
+    # all of these quantities must have the right shape
     y = setup.model(theta, design)
     assert y.shape == (2,)
 
     r = setup.likelihood.precision_weighted_residual(y, theta, design)
-    assert r.shape == (2,)  # espace obs
+    assert r.shape == (2,)  # obs space
 
     g = setup.likelihood.grad_log_likelihood(y, theta, design)
-    assert g.shape == (4,)  # espace param
+    assert g.shape == (4,)  # param space
 
     H = setup.likelihood.hessian(theta, design)
     assert H.shape == (4, 4)
 
     s = setup.likelihood.sample(key, theta, design, n_samples=5)
-    assert s.shape == (5, 2)  # 5 tirages, m=2
+    assert s.shape == (5, 2)  # 5 draws, m=2
 
     ll = setup.likelihood.log_likelihood(y, theta, design)
     assert ll.shape == ()
 
 
 def test_hessian_design_equals_row_selection(setup):
-    """H(design) = -A[design]ᵀ Σ_sub⁻¹ A[design], sélection explicite."""
+    """H(design) = -A[design]ᵀ Σ_sub⁻¹ A[design], explicit selection."""
     theta = setup.prior.mu
     design = jnp.array([0, 2])
 

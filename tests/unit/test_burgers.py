@@ -45,19 +45,19 @@ def test_properties(setup: Setup):
 
 
 def test_burgers_lambda_zero_is_linear(setup: Setup):
-    """À λ=0, Burgers est linéaire : jacobienne indépendante de theta."""
+    """At λ=0, Burgers is linear: Jacobian independent of theta."""
     model_burgers = setup.burgers_diffusion_model
     J1 = model_burgers.jacobian(jnp.zeros(model_burgers.n))
     J2 = model_burgers.jacobian(jnp.ones(model_burgers.n) * 5.0)
-    assert jnp.allclose(J1, J2, atol=1e-10)  # jacobienne constante
+    assert jnp.allclose(J1, J2, atol=1e-10)  # constant Jacobian
 
 
 def test_burgers_nonlinear_jacobian_varies(setup: Setup):
-    """À λ>0, la jacobienne dépend de theta."""
+    """At λ>0, the Jacobian depends on theta."""
     model = setup.burgers_model
     J1 = model.jacobian(jnp.zeros(model.n))
     J2 = model.jacobian(jnp.ones(model.n) * 5.0)
-    assert not jnp.allclose(J1, J2)  # jacobienne varie
+    assert not jnp.allclose(J1, J2)  # Jacobian varies
 
 
 @pytest.mark.parametrize("lam", [0.0, 0.5, 1.0])
@@ -71,7 +71,7 @@ def test_burgers_adjoint_holds(lam):
 
 
 def test_burgers_lambda_zero_matches_analytic_diffusion(setup):
-    """λ=0 : valeur exacte contre (A⁻¹B)^nt."""
+    """λ=0: exact value against (A⁻¹B)^nt."""
     model = setup.burgers_diffusion_model
     r = model.diffusivity * model.dt / (2 * model.dx**2)
     L = -2 * jnp.eye(4) + jnp.eye(4, k=1) + jnp.eye(4, k=-1)

@@ -20,7 +20,7 @@ class Setup(NamedTuple):
 
 
 def _make_setup(lambda_: float) -> Setup:
-    """Chaîne complète sur Burgers, à un λ donné."""
+    """Full chain on Burgers, at a given λ."""
     model = Burgers(diffusivity=1.0, lambda_=lambda_, T=1.0, domain=[0, 1], nt=5, n=4)
     prior = GaussianProcess(
         kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.ones(model.n)
@@ -32,30 +32,30 @@ def _make_setup(lambda_: float) -> Setup:
 
 @pytest.fixture
 def setup_linear() -> Setup:
-    """λ=0 : modèle linéaire, Laplace exact."""
+    """λ=0: linear model, Laplace exact."""
     return _make_setup(lambda_=0.0)
 
 
 @pytest.fixture
 def setup_nonlinear() -> Setup:
-    """λ=1 : modèle non-linéaire, Laplace approximatif."""
+    """λ=1: nonlinear model, Laplace approximate."""
     return _make_setup(lambda_=1.0)
 
 
 # ─────────────────────────────────────────────────────────
-# À λ=0 : Laplace se réduit à l'EIG exacte
+# At λ=0: Laplace reduces to the exact EIG
 # ─────────────────────────────────────────────────────────
 
 
 def test_laplace_equals_exact_at_lambda_zero(setup_linear):
-    """Modèle linéaire → Laplace = EIG exact."""
+    """Linear model -> Laplace = exact EIG."""
     laplace = LaplaceEIG(inference=setup_linear.inference)
     exact = EIG(inference=setup_linear.inference).evaluate(setup_linear.prior.mu)
     assert jnp.allclose(laplace.estimate(), exact, atol=1e-10)
 
 
 def test_laplace_independent_of_point_when_linear(setup_linear):
-    """À λ=0, la linéarisation est la même partout : point sans effet."""
+    """At λ=0, the linearization is the same everywhere: point has no effect."""
     laplace = LaplaceEIG(inference=setup_linear.inference)
     at_zero = laplace.estimate_at(jnp.zeros(setup_linear.model.n))
     at_five = laplace.estimate_at(jnp.ones(setup_linear.model.n) * 5.0)
@@ -63,12 +63,12 @@ def test_laplace_independent_of_point_when_linear(setup_linear):
 
 
 # ─────────────────────────────────────────────────────────
-# À λ>0 : Laplace dépend du point (non-linéarité)
+# At λ>0: Laplace depends on the point (nonlinearity)
 # ─────────────────────────────────────────────────────────
 
 
 def test_laplace_depends_on_point_when_nonlinear(setup_nonlinear):
-    """À λ=1, le point de linéarisation compte."""
+    """At λ=1, the linearization point matters."""
     laplace = LaplaceEIG(inference=setup_nonlinear.inference)
     at_zero = laplace.estimate_at(jnp.zeros(setup_nonlinear.model.n))
     at_five = laplace.estimate_at(jnp.ones(setup_nonlinear.model.n) * 5.0)
@@ -76,13 +76,13 @@ def test_laplace_depends_on_point_when_nonlinear(setup_nonlinear):
 
 
 # ─────────────────────────────────────────────────────────
-# Propriétés générales, quel que soit λ
+# General properties, regardless of λ
 # ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize("lam", [0.0, 0.5, 1.0])
 def test_laplace_returns_positive_scalar(lam):
-    """Laplace renvoie un scalaire positif dans tous les régimes."""
+    """Laplace returns a positive scalar in all regimes."""
     setup = _make_setup(lambda_=lam)
     laplace = LaplaceEIG(inference=setup.inference)
     val = laplace.estimate()
@@ -91,7 +91,7 @@ def test_laplace_returns_positive_scalar(lam):
 
 
 def test_laplace_estimate_matches_estimate_at_prior_mean(setup_nonlinear):
-    """estimate() = estimate_at(μ_prior), par définition du défaut."""
+    """estimate() = estimate_at(μ_prior), by definition of the default."""
     laplace = LaplaceEIG(inference=setup_nonlinear.inference)
     default = laplace.estimate()
     explicit = laplace.estimate_at(setup_nonlinear.prior.mu)
@@ -99,7 +99,7 @@ def test_laplace_estimate_matches_estimate_at_prior_mean(setup_nonlinear):
 
 
 def test_laplace_with_design(setup_nonlinear):
-    """Laplace fonctionne avec un design restreint."""
+    """Laplace works with a restricted design."""
     laplace = LaplaceEIG(inference=setup_nonlinear.inference)
     design = jnp.array([0, 2])
     val = laplace.estimate(design=design)

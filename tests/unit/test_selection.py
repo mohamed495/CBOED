@@ -10,7 +10,7 @@ def test_selection_extracts():
 
 
 def test_selection_adjoint():
-    """⟨Hu, y⟩ = ⟨u, Hᵀy⟩ pour tous u, y."""
+    """⟨Hu, y⟩ = ⟨u, Hᵀy⟩ for all u, y."""
     H = selection_operator(jnp.array([0, 2]), n=4)
     u = jnp.arange(4.0)
     y = jnp.array([1.0, 2.0])

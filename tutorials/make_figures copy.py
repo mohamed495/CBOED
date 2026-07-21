@@ -37,74 +37,16 @@ from cboed.viz import matrices as vm
 from cboed.viz import spectrum as vs
 from cboed.viz.style import save, use_style
 
-M_GREEDY = 8  # GreedyBatchReopt est en O(m^2 * n_candidates) : ~23 000 evaluations a m=8
+M_GREEDY = 8  # GreedyBatchReopt is O(m^2 * n_candidates): ~23,000 evaluations at m=8
 
 N_SAMPLES = 20_000
 N_GRADIENT = 500
 M_MAX = max(SENSOR_BUDGETS)
-X = np.linspace(DOMAIN[0], DOMAIN[1], N + 2)[1:-1]  # points INTERIEURS
+X = np.linspace(DOMAIN[0], DOMAIN[1], N + 2)[1:-1]  # INTERIOR points
 
 
 # =============================================================================
-# 2. Non gaussianite : log(alpha), log(beta)
-# =============================================================================
-
-def fig_alpha_beta_lambda(data, out):
-
-    fig, axes = plt.subplots(
-        1,
-        3,
-        figsize=(15,4),
-        sharey=False
-    )
-
-    for lam, d in sorted(data.items()):
-
-        q = quasi_optimality(
-            as_diagnostics(d)
-        )
-
-        alpha = np.asarray(q.alpha)
-        beta = np.asarray(q.beta)
-
-        axes[0].plot(
-            np.log(alpha),
-            label=rf"$\lambda={lam}$"
-        )
-
-        axes[1].plot(
-            np.log(beta),
-            label=rf"$\lambda={lam}$"
-        )
-
-        axes[2].plot(
-            np.log(alpha)+np.log(beta),
-            label=rf"$\lambda={lam}$"
-        )
-
-
-    axes[0].set_title(r"$\log(\alpha_i)$")
-    axes[1].set_title(r"$\log(\beta_i)$")
-    axes[2].set_title(
-        r"$\log(\alpha_i)+\log(\beta_i)$"
-    )
-
-    for ax in axes:
-        ax.set_xlabel("mode $i$")
-        ax.grid(alpha=0.3)
-        ax.legend(fontsize=8)
-
-    axes[0].set_ylabel("valeur")
-
-    fig.tight_layout()
-
-    save(
-        fig,
-        out / "02_alpha_beta_spectrum.png"
-    )
-
-# =============================================================================
-# 2. Non gaussianite : log(alpha), log(beta)
+# 2. Non-Gaussianity: log(alpha), log(beta)
 # =============================================================================
 
 def fig_alpha_beta_lambda(data, out):
@@ -152,7 +94,7 @@ def fig_alpha_beta_lambda(data, out):
         ax.grid(alpha=0.3)
         ax.legend(fontsize=8)
 
-    axes[0].set_ylabel("valeur")
+    axes[0].set_ylabel("value")
 
     fig.tight_layout()
 
@@ -162,7 +104,65 @@ def fig_alpha_beta_lambda(data, out):
     )
 
 # =============================================================================
-# 3. Bornes et design optimal
+# 2. Non-Gaussianity: log(alpha), log(beta)
+# =============================================================================
+
+def fig_alpha_beta_lambda(data, out):
+
+    fig, axes = plt.subplots(
+        1,
+        3,
+        figsize=(15,4),
+        sharey=False
+    )
+
+    for lam, d in sorted(data.items()):
+
+        q = quasi_optimality(
+            as_diagnostics(d)
+        )
+
+        alpha = np.asarray(q.alpha)
+        beta = np.asarray(q.beta)
+
+        axes[0].plot(
+            np.log(alpha),
+            label=rf"$\lambda={lam}$"
+        )
+
+        axes[1].plot(
+            np.log(beta),
+            label=rf"$\lambda={lam}$"
+        )
+
+        axes[2].plot(
+            np.log(alpha)+np.log(beta),
+            label=rf"$\lambda={lam}$"
+        )
+
+
+    axes[0].set_title(r"$\log(\alpha_i)$")
+    axes[1].set_title(r"$\log(\beta_i)$")
+    axes[2].set_title(
+        r"$\log(\alpha_i)+\log(\beta_i)$"
+    )
+
+    for ax in axes:
+        ax.set_xlabel("mode $i$")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+
+    axes[0].set_ylabel("value")
+
+    fig.tight_layout()
+
+    save(
+        fig,
+        out / "02_alpha_beta_spectrum.png"
+    )
+
+# =============================================================================
+# 3. Bounds and optimal design
 # =============================================================================
 
 def fig_optimal_bounds(lambda_, d, out):

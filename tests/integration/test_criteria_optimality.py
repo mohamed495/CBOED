@@ -38,7 +38,7 @@ def setup() -> Setup:
 
 
 # ─────────────────────────────────────────────────────────
-# Types et forms
+# Types and shapes
 # ─────────────────────────────────────────────────────────
 
 
@@ -46,7 +46,7 @@ def setup() -> Setup:
 def test_evaluate_returns_scalar(setup, Crit):
     crit = Crit(inference=setup.inference)
     val = crit.evaluate(theta=setup.prior.mu)
-    assert val.shape == ()  # scalaire JAX
+    assert val.shape == ()  # JAX scalar
     assert jnp.isdtype(val.dtype, "real floating")
 
 
@@ -58,18 +58,18 @@ def test_evaluate_is_finite(setup, Crit):
 
 
 # ─────────────────────────────────────────────────────────
-# Invariants mathématiques
+# Mathematical invariants
 # ─────────────────────────────────────────────────────────
 
 
 def test_eig_is_positive(setup):
-    """Observer ne peut qu'apporter de l'information."""
+    """Observing can only add information."""
     eig = EIG(inference=setup.inference)
     assert eig.evaluate(theta=setup.prior.mu) > 0
 
 
 def test_doptimal_equals_log_det_posterior(setup):
-    """D-opt = log det Γ_post⁻¹, par définition."""
+    """D-opt = log det Γ_post⁻¹, by definition."""
     dopt = DOptimal(inference=setup.inference)
     val = dopt.evaluate(theta=setup.prior.mu)
     expected = setup.inference.log_det_posterior_precision(setup.prior.mu)
@@ -77,13 +77,13 @@ def test_doptimal_equals_log_det_posterior(setup):
 
 
 def test_aoptimal_is_negative(setup):
-    """A-opt = -tr(Γ_post) < 0 (on maximise, donc -trace)."""
+    """A-opt = -tr(Γ_post) < 0 (we maximize, hence -trace)."""
     aopt = AOptimal(inference=setup.inference)
     assert aopt.evaluate(theta=setup.prior.mu) < 0
 
 
 def test_doptimal_matches_sum_log_eigvals(setup):
-    """log det = Σ log λ : les deux voies de calcul coïncident."""
+    """log det = Σ log λ: the two computation paths agree."""
     dopt = DOptimal(inference=setup.inference)
     via_logdet = dopt.evaluate(theta=setup.prior.mu)
     eigs = jnp.linalg.eigvalsh(setup.inference.posterior_precision(setup.prior.mu))
@@ -92,7 +92,7 @@ def test_doptimal_matches_sum_log_eigvals(setup):
 
 
 # ─────────────────────────────────────────────────────────
-# Valeurs contre oracle dense (chemin indépendant)
+# Values against a dense oracle (independent path)
 # ─────────────────────────────────────────────────────────
 
 
@@ -108,7 +108,7 @@ def test_eig_matches_dense(setup):
 
 
 def test_aoptimal_matches_trace(setup):
-    """A-opt = -tr(Γ_post) = -Σ 1/λᵢ, contre la trace directe."""
+    """A-opt = -tr(Γ_post) = -Σ 1/λᵢ, against the direct trace."""
     aopt = AOptimal(inference=setup.inference)
     val = aopt.evaluate(theta=setup.prior.mu)
 
@@ -118,10 +118,10 @@ def test_aoptimal_matches_trace(setup):
 
 
 # ─────────────────────────────────────────────────────────
-# Comportement en design — à activer quand H(ξ) existera
+# Design behavior -- to activate once H(ξ) exists
 # ─────────────────────────────────────────────────────────
 def test_eig_submodular(setup):
-    """Rendement décroissant : gain marginal du 2e capteur ≤ gain du 1er."""
+    """Diminishing returns: the marginal gain of the 2nd sensor <= gain of the 1st."""
     eig = EIG(inference=setup.inference)
     theta = setup.prior.mu
     e0 = eig.evaluate(theta, design=jnp.array([0]))

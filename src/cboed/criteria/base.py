@@ -5,7 +5,7 @@ from jaxtyping import Array, Float, Int
 
 
 class Criterion(ABC):
-    """Critère d'optimalité = fonction scalaire de la précision postérieure."""
+    """Optimality criterion = scalar function of the posterior precision."""
 
     def __init__(self, **hyperparameters):
         self._hyperparameters = hyperparameters

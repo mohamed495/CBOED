@@ -1,19 +1,19 @@
-r"""Matrices diagnostiques par approximation -- §3.2.
+r"""Approximation-based diagnostic matrices -- §3.2.
 
-Troisième voie vers ``Sigma_signal`` et ``Sigma_noise``, à côté de :mod:`sample_based`
-(§3.1) et :mod:`gradient_based` (§3.3). Toutes trois produisent les **mêmes** deux
-matrices ; elles diffèrent par le coût et par ce qu'elles garantissent.
+Third route to ``Sigma_signal`` and ``Sigma_noise``, alongside :mod:`sample_based`
+(§3.1) and :mod:`gradient_based` (§3.3). All three produce the **same** two
+matrices; they differ in cost and in what they guarantee.
 
-Le principe (29)-(30)
----------------------
-``E[u(eta)|Y]`` est la projection orthogonale de ``u(eta)`` sur ``L^2_{pi_Y}``. Donnée
-une classe d'approximation ``F``, le **débruiteur**
+The principle (29)-(30)
+------------------------
+``E[u(eta)|Y]`` is the orthogonal projection of ``u(eta)`` onto ``L^2_{pi_Y}``.
+Given an approximation class ``F``, the **denoiser**
 
 .. math::
     f \in \arg\min_{f \in F} E[\|u(\eta) - f(Y)\|^2]
 
-approche cette espérance conditionnelle : ``f(u(eta) + eps) ~ u(eta)``, il retire le
-bruit. On en déduit (Prop. 3)
+approximates this conditional expectation: ``f(u(eta) + eps) ~ u(eta)``, it
+removes the noise. From this follows (Prop. 3)
 
 .. math::
     \Sigma^{(N,F)}_{\rm signal} =
@@ -22,23 +22,25 @@ bruit. On en déduit (Prop. 3)
     \qquad
     R_f = \frac1N \sum_i (u(\eta^{(i)}) - f(Y^{(i)}))^{\otimes 2}
 
-Coût et garantie
-----------------
-* **Coût marginal nul.** ``f`` est appris sur les paires ``(eta, Y)`` déjà tirées pour
-  ``Sigma_Y`` (§3.1). Aucune jacobienne (contrairement à §3.3), aucun MCMC. C'est ce
-  qui passe à l'échelle.
-* **Estimateur, pas borne certifiée.** ``E[(u - f(Y))^{⊗2}] ⪰ E[Cov(u|Y)]`` (égalité
-  ssi ``f = E[u|Y]``), donc ``R_f`` **majore** la covariance conditionnelle. La matrice
-  est bien définie (Prop. 3, si ``F`` contient les affines) mais ne rentre pas dans le
-  Thm 2.1 comme garantie -- elle l'approche.
+Cost and guarantee
+-------------------
+* **Zero marginal cost.** ``f`` is learned on the ``(eta, Y)`` pairs already
+  drawn for ``Sigma_Y`` (§3.1). No Jacobian (unlike §3.3), no MCMC. That is
+  what makes it scale.
+* **Estimator, not a certified bound.** ``E[(u - f(Y))^{⊗2}] ⪰ E[Cov(u|Y)]``
+  (equality iff ``f = E[u|Y]``), so ``R_f`` **upper-bounds** the conditional
+  covariance. The matrix is well defined (Prop. 3, if ``F`` contains the
+  affines) but does not enter Thm 2.1 as a guarantee -- it only approximates
+  it.
 
-Le débruiteur affine
+The affine denoiser
 --------------------
-Prop. 3 exige que ``F`` contienne les fonctions affines. Le débruiteur **affine** est
-donc le plancher : ``f(Y) = A Y + b`` avec ``A = Cov(u, Y) Cov(Y)^{-1}``, en forme
-fermée sur les mêmes paires. À ``lambda = 0`` le modèle est linéaire, ``E[u|Y]`` est
-exactement affine, et ``Sigma^{(F)}_signal`` **égale** la voie gradient -- c'est
-l'oracle inter-modules.
+Prop. 3 requires that ``F`` contain the affine functions. The **affine**
+denoiser is therefore the floor: ``f(Y) = A Y + b`` with
+``A = Cov(u, Y) Cov(Y)^{-1}``, in closed form on the same pairs. At
+``lambda = 0`` the model is linear, ``E[u|Y]`` is exactly affine, and
+``Sigma^{(F)}_signal`` **equals** the gradient route -- the cross-module
+oracle.
 """
 
 import jax
@@ -55,7 +57,7 @@ def affine_denoiser(
     u_samples: Float[Array, "n_samples n_obs"],
     features: Float[Array, "n_samples n_feat"],
 ) -> tuple[Float[Array, "n_obs n_feat"], Float[Array, " n_obs"]]:
-    r"""Débruiteur affine ``f(Y) = A Y + b`` par moindres carrés -- forme fermée.
+    r"""Affine denoiser ``f(Y) = A Y + b`` via least squares -- closed form.
 
     .. math::
         A = \mathrm{Cov}(u, Y)\,\mathrm{Cov}(Y)^{-1}, \qquad b = E[u] - A\,E[Y]
@@ -63,17 +65,18 @@ def affine_denoiser(
     Parameters
     ----------
     u_samples : Float[Array, "n_samples n_obs"]
-        Les ``u(eta^{(i)})`` -- la cible à débruiter.
+        The ``u(eta^{(i)})`` -- the target to denoise.
     features : Float[Array, "n_samples n_feat"]
-        Les entrées du débruiteur. ``Y`` pour ``f`` (n_feat = n_obs) ; ``(Y, theta)``
-        concaténés pour ``g`` (n_feat = n_obs + n_param).
+        The denoiser's inputs. ``Y`` for ``f`` (n_feat = n_obs); ``(Y, theta)``
+        concatenated for ``g`` (n_feat = n_obs + n_param).
 
     Notes
     -----
-    Régression sur les **mêmes** paires que ``Sigma_Y`` : coût marginal nul.
+    Regression on the **same** pairs as ``Sigma_Y``: zero marginal cost.
 
-    ``Cov(Y)`` est régularisée par un jitter relatif : à ``sigma_obs`` petit et ``N``
-    modeste, la covariance empirique des features peut être quasi singulière.
+    ``Cov(Y)`` is regularized with a relative jitter: at small ``sigma_obs``
+    and modest ``N``, the empirical covariance of the features can be nearly
+    singular.
     """
     n = u_samples.shape[0]
     u_bar, f_bar = u_samples.mean(0), features.mean(0)
@@ -96,11 +99,11 @@ def denoiser_residual(
     A: Float[Array, "n_obs n_feat"],
     b: Float[Array, " n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``R_f = (1/N) sum (u - f(Y))^{⊗2}`` -- le résidu du débruiteur.
+    r"""``R_f = (1/N) sum (u - f(Y))^{⊗2}`` -- the denoiser's residual.
 
-    ``R_f`` **majore** ``E[Cov(u|Y)]`` (égalité ssi ``f = E[u|Y]``). C'est ce qui rend
-    §3.2 non certifié : la matrice est bien définie mais l'ordre de Loewner du Thm 2.1
-    n'est pas garanti.
+    ``R_f`` **upper-bounds** ``E[Cov(u|Y)]`` (equality iff ``f = E[u|Y]``).
+    This is what makes §3.2 uncertified: the matrix is well defined but the
+    Loewner order of Thm 2.1 is not guaranteed.
     """
     resid = u_samples - (features @ A.T + b)
     out = resid.T @ resid / resid.shape[0]
@@ -115,9 +118,10 @@ def _assemble_from_residual(
 ) -> Float[Array, "n_obs n_obs"]:
     r"""``(Sigma_obs^{-1} - Sigma_obs^{-1} R Sigma_obs^{-1})^{-1}`` -- Prop. 3.
 
-    ⚠️ Bien définie **ssi** ``R ≺ Sigma_obs`` (Prop. 3, garanti si ``F`` contient les
-    affines et ``N`` assez grand). Sinon la parenthèse cesse d'être SDP et l'inverse
-    n'existe pas -- c'est le prix de l'absence de certification.
+    ⚠️ Well defined **iff** ``R ≺ Sigma_obs`` (Prop. 3, guaranteed if ``F``
+    contains the affines and ``N`` is large enough). Otherwise the
+    parenthesized term stops being SDP and the inverse does not exist -- the
+    price of not being certified.
     """
     chol = jsp.linalg.cho_factor(Sigma_obs, lower=True)
     inner = jsp.linalg.cho_solve(chol, R)
@@ -134,12 +138,13 @@ def approximation_signal(
     Y_samples: Float[Array, "n_samples n_obs"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma^{(N,F)}_signal`` par débruiteur affine ``f : Y -> u(eta)``.
+    r"""``Sigma^{(N,F)}_signal`` via the affine denoiser ``f : Y -> u(eta)``.
 
     Parameters
     ----------
     u_samples, Y_samples : Float[Array, "n_samples n_obs"]
-        Paires ``(u(eta^{(i)}), Y^{(i)})`` -- **celles déjà tirées pour ``Sigma_Y``**.
+        Pairs ``(u(eta^{(i)}), Y^{(i)})`` -- **the ones already drawn for
+        ``Sigma_Y``**.
     Sigma_obs : Float[Array, "n_obs n_obs"]
     """
     A, b = affine_denoiser(u_samples, Y_samples)
@@ -155,10 +160,11 @@ def approximation_noise(
     theta_samples: Float[Array, "n_samples n_param"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma^{(N,G)}_noise`` par débruiteur affine ``g : (Y, theta) -> u(eta)``.
+    r"""``Sigma^{(N,G)}_noise`` via the affine denoiser ``g : (Y, theta) -> u(eta)``.
 
-    ``g`` voit ``theta`` en plus de ``Y`` : il débruite mieux, donc ``R_g ⪯ R_f``, donc
-    ``Sigma_noise ⪯ Sigma_signal`` -- l'écart **est** ``gap_h``.
+    ``g`` sees ``theta`` in addition to ``Y``: it denoises better, so
+    ``R_g ⪯ R_f``, hence ``Sigma_noise ⪯ Sigma_signal`` -- the gap **is**
+    ``gap_h``.
     """
     features = jnp.concatenate([Y_samples, theta_samples], axis=1)
     A, b = affine_denoiser(u_samples, features)

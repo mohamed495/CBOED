@@ -1,16 +1,17 @@
-r"""Bancs de référence.
+r"""Reference benchmarks.
 
-Dans le paquet et non dans `tests/` : le banc est de la **configuration
-scientifique**, pas de l'infrastructure de test. Les tests et les scripts
-d'expérience le lisent au même endroit -- sinon ils divergent en silence, et rien ne
-le voit (`test_bench.py` teste le conftest, jamais les scripts).
+In the package and not in `tests/`: the benchmark is **scientific
+configuration**, not test infrastructure. Tests and experiment scripts read
+it from the same place -- otherwise they silently diverge, and nothing
+catches it (`test_bench.py` tests the conftest, never the scripts).
 
-Aligné sur le prototype NumPy : `dt=0.001 x 100` donc `T=0.1`, `n=200`, `nu=0.02`,
-`sigma_obs=0.1`, `Matern32(0.2, 1.0)`, `mu=0`.
+Aligned with the NumPy prototype: `dt=0.001 x 100` hence `T=0.1`, `n=200`,
+`nu=0.02`, `sigma_obs=0.1`, `Matern32(0.2, 1.0)`, `mu=0`.
 
-Longueur de diffusion `sqrt(nu T) = 0.045`, soit 4.5 % du domaine : le champ garde sa
-structure assez longtemps pour que l'advection agisse. (Un banc `T=1, nu=0.05` donne
-0.22 -- le champ est lisse avant d'avoir pu faire quoi que ce soit de non linéaire.)
+Diffusion length `sqrt(nu T) = 0.045`, i.e. 4.5% of the domain: the field
+keeps its structure long enough for advection to act. (A benchmark with
+`T=1, nu=0.05` gives 0.22 -- the field is smooth before it can do anything
+nonlinear.)
 """
 
 import jax.numpy as jnp
@@ -19,40 +20,40 @@ from cboed.core.burgers import Burgers
 from cboed.priors.gaussian_process import GaussianPrior, GaussianProcess
 from cboed.priors.kernel import Matern32
 
-# -- modele --------------------------------------------------------------
+# -- model -----------------------------------------------------------------
 N = 200
 NT = 100
 T = 0.1  # dt = T / NT = 0.001
 NU = 0.2
 DOMAIN = [0.0, 1.0]
 
-# -- bruit d'observation -------------------------------------------------
-SIGMA_OBS = 0.1  # ecart-type -> Sigma_obs = SIGMA_OBS**2 * I
+# -- observation noise -------------------------------------------------------
+SIGMA_OBS = 0.1  # standard deviation -> Sigma_obs = SIGMA_OBS**2 * I
 SIGMA_OBS_MATRIX = SIGMA_OBS**2 * jnp.eye(N)
 
-# -- prior ---------------------------------------------------------------
+# -- prior -------------------------------------------------------------------
 KERNEL_LENGTH_SCALE = 0.2
 KERNEL_SIGMA = 0.3
 
-# -- balayages -----------------------------------------------------------
+# -- sweeps --------------------------------------------------------------
 LAMBDAS = (0.0, 0.25, 0.5, 1.0)
 SENSOR_BUDGETS = (5, 10, 15, 20, 25)
 
-# -- goal-oriented : QoI = premiere moitie du champ -----------------------
-# Sigma_xi = 0 exactement est une limite singuliere (qoi_fisher_moment diverge,
-# cf. bounds/diagnostics/gradient_based.py) : jitter non nul, choisi petit
-# devant la variance du prior (KERNEL_SIGMA**2 = 1).
+# -- goal-oriented: QoI = first half of the field ---------------------------
+# Sigma_xi = 0 exactly is a singular limit (qoi_fisher_moment diverges,
+# cf. bounds/diagnostics/gradient_based.py): nonzero jitter, chosen small
+# relative to the prior variance (KERNEL_SIGMA**2 = 1).
 N_QOI = N // 2
 SIGMA_XI_QOI = 1e-3 * jnp.eye(N_QOI)
 
 
 def qoi_projection(n_qoi: int = N_QOI):
-    """``h : eta -> eta[:n_qoi]`` -- premiere moitie du champ."""
+    """``h : eta -> eta[:n_qoi]`` -- first half of the field."""
     return lambda eta: eta[:n_qoi]
 
 
 def make_prior(n: int = N) -> GaussianPrior:
-    """Prior GP a moyenne nulle."""
+    """Zero-mean GP prior."""
     gp = GaussianProcess(
         kernel=Matern32(length_scale=KERNEL_LENGTH_SCALE, sigma=KERNEL_SIGMA),
         mu=jnp.zeros(n),
@@ -66,28 +67,28 @@ def make_model(lambda_: float, n: int = N, nt: int = NT) -> Burgers:
 
 
 def forward(lambda_: float):
-    """`u : theta -> observations`, sans design. Ce que consomment les diagnostiques."""
+    """`u : theta -> observations`, without design. What the diagnostics consume."""
     model = make_model(lambda_)
     return lambda theta: model(theta, None)
 
 
 def grid_spacing(n: int = N) -> float:
-    """`dx = L / (n+1)` : `theta` est la condition initiale **interieure**."""
+    """`dx = L / (n+1)`: `theta` is the **interior** initial condition."""
     return (DOMAIN[1] - DOMAIN[0]) / (n + 1)
 
 
 def peclet(u_max: float, n: int = N) -> float:
-    """`Pe = max|u| dx / nu <= 2` -- au-dela, le schema centre oscille.
+    """`Pe = max|u| dx / nu <= 2` -- beyond this, the centered scheme oscillates.
 
-    Contrainte **spatiale** : raffiner `nt` n'y change rien.
+    **Spatial** constraint: refining `nt` does not change it.
     """
     return u_max * grid_spacing(n) / NU
 
 
 def cfl(u_max: float, lambda_: float, n: int = N, nt: int = NT) -> float:
-    """`lambda max|u| dt / dx <= 1`. Se corrige en montant `nt`.
+    """`lambda max|u| dt / dx <= 1`. Fixed by increasing `nt`.
 
-    Le nombre de diffusion n'est pas une contrainte : `Burgers` est IMEX, la
-    diffusion est en Crank-Nicolson implicite, inconditionnellement stable.
+    The diffusion number is not a constraint: `Burgers` is IMEX, diffusion
+    is implicit Crank-Nicolson, unconditionally stable.
     """
     return lambda_ * u_max * (T / nt) / grid_spacing(n)

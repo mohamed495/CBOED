@@ -1,4 +1,4 @@
-"""Contrats de base : noyaux de covariance et priors."""
+"""Base contracts: covariance kernels and priors."""
 
 from abc import ABC, abstractmethod
 
@@ -8,32 +8,32 @@ from jaxtyping import Float, PRNGKeyArray
 
 
 class KernelBase(ABC):
-    r"""Base des noyaux de covariance stationnaires.
+    r"""Base for stationary covariance kernels.
 
-    Porte ``length_scale`` (:math:`\ell`), ``sigma`` (:math:`\sigma`), leur
-    validation et le calcul des distances appariées. Les sous-classes
-    n'implémentent que :meth:`__call__` ; celles qui ont un hyperparamètre
-    supplémentaire le déclarent dans ``_extra_params``.
+    Carries ``length_scale`` (:math:`\ell`), ``sigma`` (:math:`\sigma`),
+    their validation, and the pairwise distance computation. Subclasses only
+    implement :meth:`__call__`; those with an extra hyperparameter declare it
+    in ``_extra_params``.
 
     Parameters
     ----------
     length_scale : float
-        Longueur de corrélation. Strictement positive.
+        Correlation length. Strictly positive.
     sigma : float
-        Écart-type du signal. Strictement positif.
+        Signal standard deviation. Strictly positive.
     **extra : float
-        Hyperparamètres propres à la sous-classe. Refusés si absents de
+        Hyperparameters specific to the subclass. Rejected if absent from
         ``_extra_params``.
 
     Raises
     ------
     TypeError
-        Si un hyperparamètre inattendu est passé.
+        If an unexpected hyperparameter is passed.
     ValueError
-        Si ``length_scale`` ou ``sigma`` n'est pas strictement positif.
+        If ``length_scale`` or ``sigma`` is not strictly positive.
     """
 
-    #: Hyperparamètres supplémentaires acceptés par la sous-classe.
+    #: Extra hyperparameters accepted by the subclass.
     _extra_params: frozenset[str] = frozenset()
 
     def __init__(self, length_scale: float, sigma: float, **extra: float) -> None:
@@ -63,45 +63,45 @@ class KernelBase(ABC):
 
     @staticmethod
     def _pairwise_distance(x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
-        r"""Distances appariées :math:`|x_1 - x_2|`, shape ``(n, m)``.
+        r"""Pairwise distances :math:`|x_1 - x_2|`, shape ``(n, m)``.
 
-        Broadcast explicite : ``jnp.subtract.outer`` relève de l'API NumPy et
-        n'est pas garanti en JAX.
+        Explicit broadcast: ``jnp.subtract.outer`` belongs to the NumPy API
+        and is not guaranteed in JAX.
         """
         return jnp.abs(x1[:, None] - x2[None, :])
 
     @abstractmethod
     def __call__(self, x1: Float[Array, " n"], x2: Float[Array, " m"]) -> Float[Array, "n m"]:
-        """Matrice de Gram ``K(x1, x2)``, shape ``(n, m)``.
+        """Gram matrix ``K(x1, x2)``, shape ``(n, m)``.
 
-        Rectangulaire par construction : aucune hypothèse ``x1 is x2``.
+        Rectangular by construction: no assumption that ``x1 is x2``.
         """
         ...
 
 
 class Prior(ABC):
-    r"""``p(theta)`` -- le prior sur le paramètre.
+    r"""``p(theta)`` -- the prior on the parameter.
 
-    Ne prend **jamais** ``design`` ni ``y`` : le prior ne dépend pas des
-    observations (cf. règle « le design touche tout ce qui touche les données,
-    jamais ce qui touche seulement theta »).
+    **Never** takes ``design`` or ``y``: the prior does not depend on the
+    observations (cf. the rule "design touches everything that touches the
+    data, never what touches only theta").
 
-    Le contrat est en **actions** (``*_matmul``, ``log_det_*``), pas en
-    matrices : en haute dimension ``Gamma_prior`` (d x d) n'est pas
-    matérialisable. :meth:`Sigma` et :meth:`hessian` sont fournies ici comme
-    **oracles denses**, implémentées une fois à partir des actions -- utiles en
-    test et en basse dimension, interdites en haute.
+    The contract is in **actions** (``*_matmul``, ``log_det_*``), not
+    matrices: in high dimension ``Gamma_prior`` (d x d) cannot be
+    materialized. :meth:`Sigma` and :meth:`hessian` are provided here as
+    **dense oracles**, implemented once from the actions -- useful for
+    testing and in low dimension, forbidden in high dimension.
     """
 
     @property
     @abstractmethod
     def mu(self) -> Float[Array, " n_param"]:
-        """Moyenne du prior. Survit au low-rank : c'est un vecteur."""
+        """Prior mean. Survives low-rank: it is a vector."""
         ...
 
     @abstractmethod
     def log_prior(self, theta: Float[Array, " n_param"]) -> Float[Array, ""]:
-        """``log p(theta)``, constante de normalisation incluse."""
+        """``log p(theta)``, normalization constant included."""
         ...
 
     @abstractmethod
@@ -111,17 +111,17 @@ class Prior(ABC):
 
     @abstractmethod
     def log_det_precision(self) -> Float[Array, ""]:
-        """``log det Gamma_prior^{-1}``, sans matérialiser l'inverse."""
+        """``log det Gamma_prior^{-1}``, without materializing the inverse."""
         ...
 
     @abstractmethod
     def prior_cov_matmul(self, B: Float[Array, "n_param k"]) -> Float[Array, "n_param k"]:
-        """``Gamma_prior @ B``, sans matérialiser ``Gamma_prior``."""
+        """``Gamma_prior @ B``, without materializing ``Gamma_prior``."""
         ...
 
     @abstractmethod
     def prior_precision_matmul(self, B: Float[Array, "n_param k"]) -> Float[Array, "n_param k"]:
-        """``Gamma_prior^{-1} @ B``, par solve -- jamais par inversion."""
+        """``Gamma_prior^{-1} @ B``, via solve -- never via inversion."""
         ...
 
     @abstractmethod
@@ -129,17 +129,17 @@ class Prior(ABC):
         """``theta ~ p(.)``."""
         ...
 
-    # -- oracles denses : dérivés des actions, jamais réimplémentés --------
+    # -- dense oracles: derived from the actions, never reimplemented ------
 
     def Sigma(self) -> Float[Array, "n_param n_param"]:
-        """``Gamma_prior`` dense. Oracle -- O(d^2) mémoire, interdit en haute dim."""
+        """Dense ``Gamma_prior``. Oracle -- O(d^2) memory, forbidden in high dim."""
         n = self.mu.shape[0]
         return self.prior_cov_matmul(jnp.eye(n, dtype=self.mu.dtype))
 
     def hessian(self) -> Float[Array, "n_param n_param"]:
-        """``-Gamma_prior^{-1}`` dense -- Hessienne de la log-densité, négative.
+        """Dense ``-Gamma_prior^{-1}`` -- Hessian of the log-density, negative.
 
-        Oracle. Matérialisée **à la demande**, plus à la construction.
+        Oracle. Materialized **on demand**, not at construction.
         """
         n = self.mu.shape[0]
         return -self.prior_precision_matmul(jnp.eye(n, dtype=self.mu.dtype))

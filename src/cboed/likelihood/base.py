@@ -1,4 +1,4 @@
-"""Contrat de vraisemblance."""
+"""Likelihood contract."""
 
 from abc import ABC, abstractmethod
 from functools import partial
@@ -12,18 +12,18 @@ from cboed.core.linear_operator import LinearizedOperator
 
 
 class Likelihood(ABC):
-    r"""``p(y | theta, design)``. Porte l'opérateur d'observation et le bruit.
+    r"""``p(y | theta, design)``. Carries the observation operator and the noise.
 
-    Le ``design`` entre **ici et nulle part ailleurs** : il sélectionne ce qui
-    est observé, sans toucher au prior ni à la dynamique directe.
+    The ``design`` enters **here and nowhere else**: it selects what is
+    observed, without touching the prior or the forward dynamics.
 
     Notes
     -----
-    **Espace des observations.** Quand un ``design`` est fourni, ``y`` a
-    ``n_sensors`` composantes (``m``) ; quand il vaut ``None``, on observe tout
-    et ``m = p``. Dans les deux cas ``y`` vit en ``n_sensors`` -- aucun ``y`` de
-    ce module n'a la dimension ``n_obs``. Seule ``Sigma_obs`` (``p x p``), non
-    restreinte, la porte légitimement.
+    **Observation space.** When a ``design`` is given, ``y`` has
+    ``n_sensors`` components (``m``); when it is ``None``, everything is
+    observed and ``m = p``. In both cases ``y`` lives in ``n_sensors`` --
+    no ``y`` in this module has the ``n_obs`` dimension. Only ``Sigma_obs``
+    (``p x p``), unrestricted, legitimately carries it.
     """
 
     @abstractmethod
@@ -42,7 +42,7 @@ class Likelihood(ABC):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
-        """``d(mean)/dtheta`` en ``(theta, design)``, matrix-free. Indépendant de y."""
+        """``d(mean)/dtheta`` at ``(theta, design)``, matrix-free. Independent of y."""
         ...
 
     @abstractmethod
@@ -52,7 +52,7 @@ class Likelihood(ABC):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, " n_param"]:
-        """``J^T Sigma_obs^{-1} (y - M(theta))``, en espace paramètre."""
+        """``J^T Sigma_obs^{-1} (y - M(theta))``, in parameter space."""
         ...
 
     @abstractmethod
@@ -61,7 +61,7 @@ class Likelihood(ABC):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> LinearizedOperator:
-        """Gauss-Newton ``-J^T Sigma_obs^{-1} J``, matrix-free et symétrique."""
+        """Gauss-Newton ``-J^T Sigma_obs^{-1} J``, matrix-free and symmetric."""
         ...
 
     @abstractmethod
@@ -75,7 +75,7 @@ class Likelihood(ABC):
         """``y ~ p(. | theta, design)``."""
         ...
 
-    # -- oracles denses : matérialisés depuis les opérateurs ---------------
+    # -- dense oracles: materialized from the operators ---------------------
 
     @partial(jax.jit, static_argnums=(0,))
     def jacobian(
@@ -83,10 +83,10 @@ class Likelihood(ABC):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_sensors n_param"]:
-        """``J`` dense, ``(m, d)``.
+        """Dense ``J``, ``(m, d)``.
 
-        Le ``.T`` compte : ``vmap`` empile les images en **lignes**, on veut les
-        colonnes.
+        The ``.T`` matters: ``vmap`` stacks the images as **rows**, but we
+        want the columns.
         """
         op = self.jacobian_operator(theta, design)
         return jax.vmap(op.matvec)(jnp.eye(op.shape[1])).T
@@ -97,22 +97,22 @@ class Likelihood(ABC):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param n_param"]:
-        r"""Gauss-Newton dense, ``(d, d)``. Oracle -- interdite en haute dim.
+        r"""Dense Gauss-Newton, ``(d, d)``. Oracle -- forbidden in high dimension.
 
-        Concrète : matérialise :meth:`hessian_operator`, un seul chemin
-        numérique, aucune sous-classe ne la réimplémente de travers.
+        Concrete: materializes :meth:`hessian_operator`, a single numerical
+        path, no subclass reimplements it in a different way.
 
-        **Ce n'est pas la vraie Hessienne** :
+        **This is not the true Hessian**:
 
         .. math::
             \nabla^2 \log p = -J^T \Sigma^{-1} J
-            + [\text{terme en } \partial^2 u/\partial\theta^2 -- \text{IGNORÉ}]
+            + [\text{term in } \partial^2 u/\partial\theta^2 -- \text{IGNORED}]
 
-        À ``lambda=0`` le terme omis est nul et Gauss-Newton est exact. À
-        ``lambda>0`` il diffère de l'autodiff : ce n'est **pas un bug**, c'est
-        l'approximation de Laplace, et l'écart *est* la non-linéarité que les
-        bornes quantifient. Ne pas écrire de test contre
-        ``jax.hessian(log_likelihood)`` à ``lambda>0`` -- il échouera à raison.
+        At ``lambda=0`` the omitted term is zero and Gauss-Newton is exact. At
+        ``lambda>0`` it differs from autodiff: this is **not a bug**, it is
+        the Laplace approximation, and the gap *is* the nonlinearity that the
+        bounds quantify. Do not write a test against
+        ``jax.hessian(log_likelihood)`` at ``lambda>0`` -- it will fail, rightly so.
         """
         op = self.hessian_operator(theta, design)
         H = jax.vmap(op.matvec)(jnp.eye(op.shape[1])).T

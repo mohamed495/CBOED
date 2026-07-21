@@ -1,8 +1,8 @@
-"""Schur : l'update rank-1 contre le recalcul direct.
+"""Schur: the rank-1 update against the direct recomputation.
 
-`schur_complement` et `schur_update` sont deux chemins indépendants vers la même
-matrice -- l'un en une passe, l'autre par récurrence. C'est l'oracle exigé par la
-règle d'or : aucun des deux ne réutilise le code de l'autre.
+`schur_complement` and `schur_update` are two independent paths to the same
+matrix -- one in a single pass, the other by recurrence. This is the oracle
+required by the golden rule: neither one reuses the other's code.
 """
 
 import jax.numpy as jnp
@@ -13,7 +13,7 @@ from cboed.bounds.schur import schur_complement, schur_gain_diagonal, schur_upda
 
 @pytest.fixture
 def spd():
-    """SDP non triviale, mal conditionnée à dessein (Sigma = I masque tout)."""
+    """Nontrivial SPD matrix, deliberately ill-conditioned (Sigma = I would hide everything)."""
     import jax.random as jr
 
     key = jr.key(0)
@@ -36,14 +36,14 @@ def test_selected_rows_and_columns_vanish(spd):
 
 
 def test_schur_complement_is_psd(spd):
-    """Le complément reste PSD -- condition du théorème 2.1."""
+    """The complement remains PSD -- condition of Theorem 2.1."""
     cond = schur_complement(spd, jnp.array([1, 4, 7]))
     assert jnp.min(jnp.linalg.eigvalsh(cond)) > -1e-8
 
 
 @pytest.mark.parametrize("design", [[3], [0, 6], [1, 4, 7], [0, 2, 5, 8]])
 def test_rank1_chain_matches_direct(spd, design):
-    """LE test du module : la récurrence rank-1 == le recalcul direct."""
+    """THE test of the module: the rank-1 recurrence == the direct recomputation."""
     cond = spd
     for j in design:
         cond = schur_update(cond, j)
@@ -51,14 +51,14 @@ def test_rank1_chain_matches_direct(spd, design):
 
 
 def test_order_does_not_matter(spd):
-    """Le complément ne dépend que de l'ensemble, pas de l'ordre d'ajout."""
+    """The complement depends only on the set, not on the order of addition."""
     a = schur_complement(spd, jnp.array([1, 4, 7]))
     b = schur_complement(spd, jnp.array([7, 1, 4]))
     assert jnp.allclose(a, b, atol=1e-8)
 
 
 def test_gain_masks_selected(spd):
-    """Sans masque, une diagonale ~1e-16 sur ~1e-16 rend un gain fini et faux."""
+    """Without masking, a ~1e-16 diagonal over ~1e-16 yields a finite but wrong gain."""
     selected = jnp.array([2, 5])
     num = schur_complement(spd, selected)
     den = schur_complement(spd + jnp.eye(spd.shape[0]), selected)
@@ -69,10 +69,10 @@ def test_gain_masks_selected(spd):
 
 
 def test_gain_matches_logdet_ratio(spd):
-    """Oracle indépendant : le gain diagonal == l'accroissement du log-det ratio.
+    """Independent oracle: the diagonal gain == the increase in the log-det ratio.
 
-    Vérifie que `½ln(num[j,j]/den[j,j])` est bien le terme incrémental du
-    théorème, et pas seulement une formule qui y ressemble.
+    Verifies that `½ln(num[j,j]/den[j,j])` is indeed the incremental term of
+    the theorem, and not merely a formula that resembles it.
     """
     num, den = spd, spd + jnp.eye(spd.shape[0])
     selected = jnp.array([1, 6])

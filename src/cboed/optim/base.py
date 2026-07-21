@@ -5,10 +5,10 @@ from jaxtyping import Array, Int
 
 
 class Result(NamedTuple):
-    """Résultat d'une optimisation de design."""
+    """Result of a design optimization."""
 
-    design: Int[Array, " n_selected"]  # indices retenus, dans l'ordre d'ajout
-    scores: list[float]  # score du critère après chaque ajout
+    design: Int[Array, " n_selected"]  # selected indices, in the order added
+    scores: list[float]  # criterion score after each addition
 
 
 class Optimizer(ABC):

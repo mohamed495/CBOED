@@ -1,11 +1,11 @@
-r"""EIG exacte et bornes pour λ=0.0 (linéaire-gaussien).
+r"""Exact EIG and bounds for λ=0.0 (linear-Gaussian).
 
-Calcule :
-  - EIG exacte (formule fermée)
-  - Borne incrémentale inf/sup (Cor. 1)
-  - Borne conservative inf/sup (Cor. 2)
+Computes:
+  - Exact EIG (closed-form formula)
+  - Incremental lower/upper bound (Cor. 1)
+  - Conservative lower/upper bound (Cor. 2)
 
-Visualise le gap entre bornes en fonction de m (nombre de capteurs).
+Visualizes the gap between bounds as a function of m (number of sensors).
 """
 
 from pathlib import Path
@@ -18,13 +18,14 @@ from cboed.viz.style import COLORS, save, use_style
 
 
 def compute_eig_exact_linear_gaussian(prior, model, Sigma_obs, ms=None):
-    """EIG exacte en cas linéaire-gaussien.
+    """Exact EIG in the linear-Gaussian case.
 
     EIG = 0.5 * log(det(Σ_Y) / det(Σ_Y|θ))
         = 0.5 * log(det(Σ_Y) / det(Σ_obs))
         = 0.5 * log(det(J Σ_θ J^T + Σ_obs) / det(Σ_obs))
 
-    Pour un design (sélection de m capteurs), faut réduire Σ_Y et Σ_obs à ces m lignes.
+    For a design (selection of m sensors), Σ_Y and Σ_obs must be reduced to
+    these m rows.
     """
     J = model.jacobian(prior.mu, None)
     Sigma_theta = prior.Sigma()
@@ -34,7 +35,7 @@ def compute_eig_exact_linear_gaussian(prior, model, Sigma_obs, ms=None):
 
     eigs = []
     for m in ms:
-        # Sélectionner les m premiers capteurs
+        # Select the first m sensors
         J_m = J[:m, :]
         Sigma_obs_m = Sigma_obs[:m, :m]
 
@@ -51,13 +52,13 @@ def compute_eig_exact_linear_gaussian(prior, model, Sigma_obs, ms=None):
 
 
 def main():
-    """Pipeline EIG + bornes pour λ=0.0."""
+    """EIG + bounds pipeline for λ=0.0."""
     use_style()
     output_dir = Path("outputs/eig_bounds")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
-    print("EIG exacte et bornes | λ = 0.0")
+    print("Exact EIG and bounds | λ = 0.0")
     print("=" * 70)
 
     # -----------------------------------------------------------------------
@@ -71,28 +72,28 @@ def main():
     print(f"\n[Setup] λ = {lambda_:.2f}, n = {model.n}, m ∈ [1, {model.n}]")
 
     # -----------------------------------------------------------------------
-    # 2. Calcul EIG exacte (greedy sur les premiers m capteurs)
+    # 2. Compute exact EIG (greedy over the first m sensors)
     # -----------------------------------------------------------------------
-    print("\n[Calcul EIG exacte]")
-    ms = jnp.arange(1, min(model.n + 1, 51), dtype=int)  # jusqu'à 50 capteurs pour la visibilité
+    print("\n[Computing exact EIG]")
+    ms = jnp.arange(1, min(model.n + 1, 51), dtype=int)  # up to 50 sensors for visibility
     eig_greedy = compute_eig_exact_linear_gaussian(prior, model, Sigma_obs, ms)
     print(f"  EIG(m=1) = {eig_greedy[0]:.4f} nats")
     print(f"  EIG(m={ms[-1]}) = {eig_greedy[-1]:.4f} nats")
 
     # -----------------------------------------------------------------------
-    # 3. Bornes (placeholders — en attendant implémentation complète)
+    # 3. Bounds (placeholders — pending full implementation)
     # -----------------------------------------------------------------------
-    print("\n[Bornes]")
-    # Pour l'instant, on trace juste l'EIG exacte
-    # Les vraies bornes nécessitent une décomposition spectrale complète
-    print("  Bornes (Cor. 1 & 2) : à implémenter via bounds/")
+    print("\n[Bounds]")
+    # For now, we just plot the exact EIG
+    # The actual bounds require a full spectral decomposition
+    print("  Bounds (Cor. 1 & 2): to be implemented via bounds/")
 
     # -----------------------------------------------------------------------
     # 4. Figures
     # -----------------------------------------------------------------------
     print("\n[Figures]")
 
-    # Figure 1 : EIG exacte en fonction de m
+    # Figure 1: exact EIG as a function of m
     fig1, ax = plt.subplots(figsize=(7, 4.5))
     ax.plot(
         ms,
@@ -101,7 +102,7 @@ def main():
         color=COLORS["exact"],
         lw=2.0,
         markersize=5,
-        label="EIG exacte (greedy)",
+        label="exact EIG (greedy)",
     )
     ax.fill_between(
         ms,
@@ -109,35 +110,35 @@ def main():
         eig_greedy * 1.2,
         alpha=0.15,
         color=COLORS["exact"],
-        label="±20% (incertitude)",
+        label="±20% (uncertainty)",
     )
-    ax.set_xlabel("Nombre de capteurs $m$")
+    ax.set_xlabel("Number of sensors $m$")
     ax.set_ylabel("EIG (nats)")
-    ax.set_title(r"EIG exacte (linéaire-gaussien) | $\lambda = 0.0$")
+    ax.set_title(r"Exact EIG (linear-Gaussian) | $\lambda = 0.0$")
     ax.legend(fontsize=9)
     ax.grid(True, alpha=0.3)
     fig1.tight_layout()
     path1 = save(fig1, output_dir / "01_eig_exact.png")
     print(f"  → {path1.name}")
 
-    # Figure 2 : Gain incrémental
+    # Figure 2: incremental gain
     eig_incremental = jnp.diff(eig_greedy, prepend=0)
     fig2, ax = plt.subplots(figsize=(7, 4.5))
     ax.bar(ms, eig_incremental, color=COLORS["incremental"], alpha=0.7, width=0.8)
-    ax.set_xlabel("Nombre de capteurs $m$")
-    ax.set_ylabel("Gain incrémental (nats)")
-    ax.set_title(r"Gain par ajout de capteur | $\lambda = 0.0$")
+    ax.set_xlabel("Number of sensors $m$")
+    ax.set_ylabel("Incremental gain (nats)")
+    ax.set_title(r"Gain per added sensor | $\lambda = 0.0$")
     ax.grid(True, alpha=0.3, axis="y")
     fig2.tight_layout()
     path2 = save(fig2, output_dir / "02_eig_incremental.png")
     print(f"  → {path2.name}")
 
     # -----------------------------------------------------------------------
-    # 5. Résumé
+    # 5. Summary
     # -----------------------------------------------------------------------
-    print("\n[Résumé]")
-    print(f"  EIG exacte tracée pour m = 1..{ms[-1]}")
-    print(f"  Figures sauvegardées dans : {output_dir.resolve()}")
+    print("\n[Summary]")
+    print(f"  Exact EIG plotted for m = 1..{ms[-1]}")
+    print(f"  Figures saved to: {output_dir.resolve()}")
     print("=" * 70)
 
 

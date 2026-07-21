@@ -29,13 +29,16 @@ Early development — `0.x` means the API is unstable and may change.
 
 |Module|Status|
 |---|---|
-|`core/` — abstract interfaces|🔨 in progress|
-|`linalg/` — randomized linear algebra|🔨 in progress|
-|`criteria/` — EIG, D-optimal|🔨 in progress|
-|`bounds/` — EIG certification|📋 planned|
-|`priors/` — Matérn priors|📋 planned|
-|`optim/` — greedy optimizer|📋 planned|
-|`surrogates/` — neural surrogates|🔮 future|
+|`core/` — abstract interfaces, forward models (advection-diffusion, Burgers)|✅ implemented|
+|`priors/` — Gaussian process priors, kernels|✅ implemented|
+|`likelihood/` — Gaussian likelihood|✅ implemented|
+|`inference/` — linear posterior, goal-oriented (QoI) posterior|✅ implemented|
+|`criteria/` — EIG, D-optimal, A-optimal|✅ implemented|
+|`bounds/` — certified EIG bounds (incremental, conservative), quasi-optimality spectrum|✅ implemented — original contribution|
+|`optim/` — greedy design selection (Schur-complement based)|✅ implemented|
+|`estimators/` — Laplace, nested Monte Carlo (standard + goal-oriented), VNMC, PCE|✅ implemented|
+|`viz/` — reconstruction, spectrum, bounds, design plots|✅ implemented|
+|`surrogates/` — neural forward surrogates|📋 planned (optional deps only, no code yet)|
 
 ---
 
@@ -134,18 +137,21 @@ the available builds).
 
 ```text
 cboed/
-├── core/          Abstract interfaces — ForwardModel, State, Criterion, Optimizer
-├── criteria/      EIG, D-optimal, goal-oriented, reconstruction
-├── estimators/    Analytical (LG), NMC, VNMC, Laplace
-├── bounds/        EIG certification — original contribution
-├── linalg/        Rank-1 updates, randomized SVD, sparse, log-det estimators
-├── priors/        Matérn priors, low-rank approximations
-├── optim/         Greedy optimizer, hyperparameter search
-├── surrogates/    Neural forward surrogates and decoders
-├── viz/           Design, covariance, bounds, validation plots
-├── io/            HDF5 storage, multi-run experiments
-└── metrics/       EIG, RMSE, OED vs random comparisons
+├── core/          Forward models (advection-diffusion, Burgers), abstract interfaces
+├── priors/        Gaussian process priors, kernels
+├── likelihood/    Gaussian likelihood
+├── inference/     Linear posterior, goal-oriented (QoI) posterior
+├── criteria/      EIG, D-optimal, A-optimal
+├── bounds/        Certified EIG bounds (incremental, conservative), quasi-optimality — original contribution
+├── optim/         Greedy design selection (Schur-complement based)
+├── estimators/    Laplace, nested Monte Carlo (standard + goal-oriented), VNMC, PCE
+└── viz/           Reconstruction, spectrum, bounds, design plots
 ```
+
+`tutorials/` holds the scripts that produce the paper's figures — `paper_protocol.py` is the
+main entry point: it sweeps $\lambda$ and the standard/goal-oriented cases, compares the three
+diagnostic methods (gradient, affine, affine+NN), and writes the reconstruction, spectrum, and
+bound figures used in the manuscript.
 
 ---
 

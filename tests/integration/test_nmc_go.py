@@ -1,4 +1,4 @@
-"""EIG goal-oriented par MC imbriqué -- oracle contre LaplaceEIG en linéaire-gaussien."""
+"""Goal-oriented EIG via nested MC -- oracle against LaplaceEIG in the linear-Gaussian case."""
 
 from typing import NamedTuple
 
@@ -29,7 +29,7 @@ class Setup(NamedTuple):
 
 
 def _make_setup() -> Setup:
-    """Lineaire (advection-diffusion), petites dimensions -- rapide."""
+    """Linear (advection-diffusion), small dimensions -- fast."""
     model = AdvectionDiffusion(diffusivity=0.0, velocity=2.0, T=1.0, domain=[0, 1], nt=5, n=6)
     prior = GaussianProcess(kernel=kernel.Gaussian(length_scale=1.0, sigma=1.0), mu=jnp.zeros(6))
     gaussian_prior = GaussianPrior(prior=prior)
@@ -74,7 +74,7 @@ def test_go_nmc_is_deterministic_given_key(setup):
 
 @pytest.mark.slow
 def test_go_nmc_converges_to_laplace_when_linear(setup):
-    """Modele lineaire : LaplaceEIG(go) est exacte, le MC goal-oriented doit converger dessus."""
+    """Linear model: LaplaceEIG(go) is exact, the goal-oriented MC must converge to it."""
     exact = LaplaceEIG(inference=setup.go).estimate_at(setup.gaussian_prior.mu)
     est = GoalOrientedNestedMonteCarloEIG(
         likelihood=setup.likelihood,

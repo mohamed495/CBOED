@@ -1,35 +1,36 @@
 #!/usr/bin/env python
-r"""Protocole complet pour le papier -- standard et goal-oriented.
+r"""Full protocol for the paper -- standard and goal-oriented.
 
-Balaie ``lambda in {0.0, 0.05, 0.2, 0.75, 1.0}``, cas standard et goal-oriented
-(QoI = premiere moitie du champ), et compare trois voies vers
-``Sigma_signal``/``Sigma_noise`` (gradient, approximation affine, approximation
-affine+reseau). Chaque repetition retire toutes les quantites MC avec une
-nouvelle cle **et** re-selectionne le design par glouton -- comme le fait le
-prototype NumPy avec son ``N_REPEATS``.
+Sweeps ``lambda in {0.0, 0.05, 0.2, 0.75, 1.0}``, standard and goal-oriented
+cases (QoI = first half of the field), and compares three routes to
+``Sigma_signal``/``Sigma_noise`` (gradient, affine approximation, affine+network
+approximation). Each repetition redraws every MC quantity with a fresh key
+**and** reselects the design via greedy -- as the NumPy prototype does with
+its ``N_REPEATS``.
 
-Trois figures
+Three figures
 -------------
-1. Reconstruction (``lambda=0``) : deux figures separees -- (a) cas standard,
-   prior/posterieur/``theta_vrai`` sur le champ complet ; (b) cas GO, meme chose
-   mais restreint a la QoI, posterieur via ``GoalOrientedModel``.
-2. Spectre ``log(alpha_i)``, ``log(beta_i)``, leur somme (``lambda > 0``,
-   methode gradient uniquement, standard et GO) -- Prop. 1.
-3. Boxplots des bornes (incrementale et conservative) sur les ``N_repeats``,
-   une serie par methode. La borne conservative utilise ``eig_full`` estime
-   par Monte-Carlo imbrique (``NestedMonteCarloEIG`` en standard,
-   ``GoalOrientedNestedMonteCarloEIG`` en GO) -- pas le defaut certifie.
+1. Reconstruction (``lambda=0``): two separate figures -- (a) standard case,
+   prior/posterior/``theta_true`` on the full field; (b) GO case, same thing
+   but restricted to the QoI, posterior via ``GoalOrientedModel``.
+2. Spectrum ``log(alpha_i)``, ``log(beta_i)``, their sum (``lambda > 0``,
+   gradient method only, standard and GO) -- Prop. 1.
+3. Boxplots of the bounds (incremental and conservative) over the
+   ``N_repeats``, one series per method. The conservative bound uses
+   ``eig_full`` estimated by nested Monte-Carlo (``NestedMonteCarloEIG`` in
+   standard, ``GoalOrientedNestedMonteCarloEIG`` in GO) -- not the certified
+   default.
 
-Methodes fragiles
+Fragile methods
 ------------------
-L'approximation affine seule leve ``ValueError`` (Prop. 3 non satisfaite) des
-que ``lambda`` s'eloigne de 0 a l'echelle reelle -- attendu, pas une erreur du
-protocole. Une methode qui echoue pour un ``(lambda, case, repeat)`` donne est
-simplement absente de ce point : pas de crash, un print de diagnostic.
+The affine approximation alone raises ``ValueError`` (Prop. 3 not satisfied)
+as soon as ``lambda`` moves away from 0 at realistic scale -- expected, not a
+protocol error. A method that fails for a given ``(lambda, case, repeat)`` is
+simply absent from that point: no crash, a diagnostic print.
 
-Echelle par defaut : reduite (validation du pipeline, pas des chiffres de
-publication). Augmenter ``--n-samples``, ``--n-gradient``, ``--net-steps``,
-``--nmc-*`` pour la production.
+Default scale: reduced (pipeline validation, not publication-grade figures).
+Increase ``--n-samples``, ``--n-gradient``, ``--net-steps``, ``--nmc-*`` for
+production.
 
 Usage
 -----
@@ -86,7 +87,7 @@ X_QOI = X[:N_QOI]
 
 
 # =============================================================================
-# Setup par (lambda, cas)
+# Setup per (lambda, case)
 # =============================================================================
 
 
@@ -103,7 +104,7 @@ def build_case(lambda_: float, case: str):
 
 
 def paired_samples(u, prior, key, n_samples):
-    """``(u(eta), Y = u(eta) + eps, eta)`` -- pour les debruiteurs affine/NN."""
+    """``(u(eta), Y = u(eta) + eps, eta)`` -- for the affine/NN denoisers."""
     k_eta, k_eps = jr.split(key)
     eta = prior.sample(k_eta, n_samples)
     u_vals = jax.vmap(u)(eta)
@@ -113,12 +114,12 @@ def paired_samples(u, prior, key, n_samples):
 
 
 # =============================================================================
-# Diagnostics par repetition -- les trois methodes
+# Diagnostics per repetition -- the three methods
 # =============================================================================
 
 
 def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: int, net_steps: int):
-    """``(Sigma_Y, Sigma_Y_given_theta, {methode: (Sigma_signal, Sigma_noise) | None})``."""
+    """``(Sigma_Y, Sigma_Y_given_theta, {method: (Sigma_signal, Sigma_noise) | None})``."""
     prior, model, u, likelihood, inference, go = build_case(lambda_, case)
     k_pairs, k_Y, k_Yth, k_grad, k_net_f, k_net_g = jr.split(key, 6)
 
@@ -150,7 +151,7 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
         Sigma_noise_a = approximation_noise(d_g, u_vals, Y, theta_for_noise, SIGMA_OBS_MATRIX)
         methods["affine"] = (Sigma_signal_a, Sigma_noise_a)
     except ValueError as e:
-        print(f"    [affine] echec lambda={lambda_} case={case}: {e}")
+        print(f"    [affine] failed lambda={lambda_} case={case}: {e}")
         methods["affine"] = None
 
     try:
@@ -160,7 +161,7 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
         Sigma_noise_nn = approximation_noise(d_g_nn, u_vals, Y, theta_for_noise, SIGMA_OBS_MATRIX)
         methods["affine_nn"] = (Sigma_signal_nn, Sigma_noise_nn)
     except ValueError as e:
-        print(f"    [affine+NN] echec lambda={lambda_} case={case}: {e}")
+        print(f"    [affine+NN] failed lambda={lambda_} case={case}: {e}")
         methods["affine_nn"] = None
 
     return Sigma_Y, Sigma_Y_given_theta, methods
@@ -168,14 +169,15 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
 
 def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_inner: int,
                        nmc_n_inner_theta: int, nmc_n_inner_marginal: int, nmc_chunk_size: int | None = None):
-    """``EIG(I_p)`` par MC imbrique -- utilise pour ``eig_full`` de la borne conservative.
+    """``EIG(I_p)`` by nested MC -- used for the conservative bound's ``eig_full``.
 
-    ``nmc_chunk_size`` : borne la memoire de crete a ``chunk_size x n_inner``
-    (au lieu de ``n_outer x n_inner``) en traitant la boucle externe par lots
-    sequentiels -- voir ``cboed.estimators.base.chunked_vmap``. Indispensable
-    sur GPU des que ``n_outer x n_inner`` (ou ``n_inner_theta``/``n_inner_marginal``
-    en GO) depasse la memoire disponible -- c'est la cause du OOM observe avec
-    les gros ``--nmc-*`` par defaut.
+    ``nmc_chunk_size``: bounds peak memory to ``chunk_size x n_inner``
+    (instead of ``n_outer x n_inner``) by processing the outer loop in
+    sequential batches -- see ``cboed.estimators.base.chunked_vmap``.
+    Essential on GPU as soon as ``n_outer x n_inner`` (or
+    ``n_inner_theta``/``n_inner_marginal`` in GO) exceeds available memory --
+    this is the cause of the OOM observed with the large default ``--nmc-*``
+    values.
     """
     prior, model, u, likelihood, inference, go = build_case(lambda_, case)
     if case == "standard":
@@ -192,22 +194,23 @@ STRATEGY_LABELS = ("iEIG design", "cEIG design")
 
 
 def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_noise, eig_full_mc, certified, budgets):
-    """Deux designs (iEIG, cEIG), quatre bornes chacun -- protocole du papier §2.
+    """Two designs (iEIG, cEIG), four bounds each -- paper protocol Sec. 2.
 
-    Meme structure que ``make_figures.py::fig_bounds`` : le design choisi en
-    optimisant (Sigma_signal, Sigma_Y_given_theta) sert de reference pour le
-    panneau "iEIG design", celui optimisant (Sigma_Y, Sigma_noise) pour
-    "cEIG design" -- chacun affiche ses quatre bornes (inc + cons).
+    Same structure as ``make_figures.py::fig_bounds``: the design chosen by
+    optimizing (Sigma_signal, Sigma_Y_given_theta) serves as the reference for
+    the "iEIG design" panel, the one optimizing (Sigma_Y, Sigma_noise) for
+    "cEIG design" -- each displaying its four bounds (inc + cons).
 
     Parameters
     ----------
     eig_full_mc : float or None
-        ``eig_full`` pour la borne conservative (Cor. 2). ``None`` (defaut,
-        comme ``make_figures.py``) -> encadre par Cor. 1 au design complet,
-        certifie. Une valeur -> l'estimation MC fournie -- decertifie la
-        borne, et a lambda=0 le biais du NMC (voir conservative_certified_vs_mc.py)
-        peut deconnecter completement le conservatif de l'incremental, qui
-        eux doivent coincider exactement (Rem. 2.2, gap nul en lineaire).
+        ``eig_full`` for the conservative bound (Cor. 2). ``None`` (default,
+        as in ``make_figures.py``) -> bounded by Cor. 1 at the full design,
+        certified. A value -> the provided MC estimate -- decertifies the
+        bound, and at lambda=0 the NMC bias (see conservative_certified_vs_mc.py)
+        can fully disconnect the conservative bound from the incremental one,
+        which should otherwise coincide exactly (Rem. 2.2, zero gap in the
+        linear case).
     """
     dg = DiagnosticMatrices(
         Sigma_Y=Sigma_Y, Sigma_Y_given_theta=Sigma_Y_given_theta,
@@ -234,29 +237,29 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
 
 
 # =============================================================================
-# Calcul + cache, par (lambda, cas)
+# Compute + cache, per (lambda, case)
 # =============================================================================
 
 
 def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_steps,
                          nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed,
                          eig_full_mode="certified", nmc_chunk_size=None):
-    """Boucle de repetition -- diagnostics 'une fois' (repeat 0) + bornes par repetition.
+    """Repetition loop -- 'once' diagnostics (repeat 0) + bounds per repetition.
 
     Parameters
     ----------
     eig_full_mode : {"certified", "mc"}
-        ``"certified"`` (defaut, comme ``make_figures.py``) : borne conservative
-        encadree par Cor. 1 au design complet, jamais estimee. ``"mc"`` : estime
-        ``eig_full`` par NMC -- decertifie la borne, coute un NMC en plus par
-        repetition, et biaise fortement le resultat a petite echelle (voir
-        ``conservative_certified_vs_mc.py``).
+        ``"certified"`` (default, as in ``make_figures.py``): conservative
+        bound bracketed by Cor. 1 at the full design, never estimated.
+        ``"mc"``: estimates ``eig_full`` via NMC -- decertifies the bound,
+        costs one extra NMC per repetition, and strongly biases the result at
+        small scale (see ``conservative_certified_vs_mc.py``).
     """
     per_method = {
         m: {label: {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")} for label in STRATEGY_LABELS}
         for m in METHODS
     }
-    once = None  # (Sigma_Y, Sigma_Y_given_theta, methods_diag) du repeat 0 -- pour fig 1/2
+    once = None  # (Sigma_Y, Sigma_Y_given_theta, methods_diag) from repeat 0 -- for fig 1/2
 
     for r in range(n_repeats):
         key = jr.fold_in(jr.key(base_seed), r)
@@ -295,7 +298,7 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
     return once, per_method
 
 
-CACHE_SCHEMA_VERSION = 2  # bump si la structure de per_method change -- invalide les caches perimes
+CACHE_SCHEMA_VERSION = 2  # bump if per_method's structure changes -- invalidates stale caches
 
 
 def cache_path(cache_dir, lambda_, case, eig_full_mode):
@@ -310,7 +313,7 @@ def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
         once = (data["once_Sigma_Y"], data["once_Sigma_Y_given_theta"], data["once_methods"].item())
         per_method = data["per_method"].item()
         return once, per_method
-    print(f"  calcul lambda={lambda_} case={case} ...", flush=True)
+    print(f"  computing lambda={lambda_} case={case} ...", flush=True)
     once, per_method = compute_lambda_case(lambda_, case, **kwargs)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -325,12 +328,12 @@ def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
 
 
 # =============================================================================
-# Figure 1 -- reconstruction, lambda=0 : standard (champ complet) et GO (QoI)
+# Figure 1 -- reconstruction, lambda=0: standard (full field) and GO (QoI)
 # =============================================================================
 
 
 def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int = 10):
-    """Champ complet, prior/posterieur/``theta_vrai`` -- sans zone QoI (c'est le cas standard)."""
+    """Full field, prior/posterior/``theta_true`` -- no QoI zone (this is the standard case)."""
     Sigma_Y, Sigma_Y_given_theta, methods_diag = once_standard_lambda0
     Sigma_signal, Sigma_noise = methods_diag["gradient"]
 
@@ -363,8 +366,8 @@ def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int 
 
 
 def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
-    """Restreint a la QoI (premiere moitie du champ) -- posterieur via GoalOrientedModel,
-    meme construction que :func:`make_figures_go.fig_reconstruction`.
+    """Restricted to the QoI (first half of the field) -- posterior via GoalOrientedModel,
+    same construction as :func:`make_figures_go.fig_reconstruction`.
     """
     Sigma_Y, Sigma_Y_given_theta, methods_diag = once_go_lambda0
     Sigma_signal, Sigma_noise = methods_diag["gradient"]
@@ -404,7 +407,7 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
 
 
 # =============================================================================
-# Figure 2 -- spectre log(alpha), log(beta), somme -- gradient, lambda>0
+# Figure 2 -- spectrum log(alpha), log(beta), sum -- gradient, lambda>0
 # =============================================================================
 
 
@@ -436,14 +439,14 @@ def fig_spectrum(all_once, out: Path):
 
 
 # =============================================================================
-# Figure 3 -- boxplots des bornes par methode
+# Figure 3 -- boxplots of the bounds per method
 # =============================================================================
 
 
 def fig_boxplots(per_method_all, budgets, out: Path):
-    """Une figure par (lambda, cas, methode) -- meme mise en page que ``07_bounds_lambda``
-    (2 panneaux, design iEIG / design cEIG), boxplot a chaque budget au lieu
-    d'une bande continue.
+    """One figure per (lambda, case, method) -- same layout as ``07_bounds_lambda``
+    (2 panels, iEIG design / cEIG design), boxplot at each budget instead of
+    a continuous band.
     """
     for (lambda_, case), per_method in per_method_all.items():
         for method, per_strategy in per_method.items():
@@ -476,17 +479,17 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument(
         "--eig-full-mode", choices=("certified", "mc"), default="certified",
-        help="Borne conservative : 'certified' (defaut, comme make_figures.py, Cor. 1 au design"
-             " complet) ou 'mc' (NMC -- decertifie, biaise fortement a petite echelle).",
+        help="Conservative bound: 'certified' (default, as in make_figures.py, Cor. 1 at the"
+             " full design) or 'mc' (NMC -- decertified, strongly biased at small scale).",
     )
     p.add_argument(
         "--nmc-chunk-size", type=int, default=200,
-        help="Borne la memoire de crete du NMC (eig-full-mode=mc) a chunk_size x n_inner au lieu"
-             " de n_outer x n_inner, en traitant la boucle externe par lots sequentiels"
-             " (cboed.estimators.base.chunked_vmap). Necessaire sur GPU des que"
-             " n_outer x n_inner (ou n_inner_theta/n_inner_marginal en GO) sature la memoire --"
-             " c'est la cause du OOM avec les --nmc-* par defaut sans chunking. Augmenter si le"
-             " GPU a de la marge (plus rapide), reduire s'il OOM encore.",
+        help="Bounds the NMC's peak memory (eig-full-mode=mc) to chunk_size x n_inner instead"
+             " of n_outer x n_inner, by processing the outer loop in sequential batches"
+             " (cboed.estimators.base.chunked_vmap). Necessary on GPU as soon as"
+             " n_outer x n_inner (or n_inner_theta/n_inner_marginal in GO) saturates memory --"
+             " this is the cause of the OOM with the default --nmc-* values without chunking."
+             " Increase if the GPU has headroom (faster), decrease if it still OOMs.",
     )
     p.add_argument("--out", default="figures_protocol")
     p.add_argument("--cache", default=".cache_protocol")
@@ -499,7 +502,7 @@ def main():
     all_once: dict = {}
     per_method_all: dict = {}
 
-    print("Calcul + figures (par lambda x cas, au fur et a mesure)")
+    print("Compute + figures (per lambda x case, as they complete)")
     for lambda_ in args.lambdas:
         for case in args.cases:
             once, per_method = load_or_compute(
@@ -513,11 +516,11 @@ def main():
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method
 
-            # Figures de ce (lambda, cas) tout de suite -- pas d'attente sur le
-            # reste du balayage. fig_spectrum se redessine a chaque fois avec
-            # tout ce qui est disponible jusqu'ici (une courbe par lambda>0
-            # deja calcule) : elle se complete au fil du balayage plutot que
-            # d'apparaitre d'un coup a la fin.
+            # Figures for this (lambda, case) right away -- no waiting on the
+            # rest of the sweep. fig_spectrum is redrawn each time with
+            # everything available so far (one curve per lambda>0 already
+            # computed): it fills in over the course of the sweep rather
+            # than appearing all at once at the end.
             print(f"  figures lambda={lambda_} case={case} ...", flush=True)
             if lambda_ == 0.0 and case == "standard":
                 fig_reconstruction_standard(once, out)

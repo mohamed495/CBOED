@@ -1,9 +1,9 @@
-"""§3.2 -- diagnostiques par approximation (débruiteur).
+"""§3.2 -- diagnostics via approximation (denoiser).
 
-L'oracle inter-modules : à `lambda = 0`, `u` est linéaire, `Y` gaussien, donc
-`E[u|Y]` est **exactement affine**. Le débruiteur affine est alors exact, et
-`Sigma^{(F)}_signal` (§3.2) égale `Sigma_signal` (§3.3, gradient). Deux voies sans
-code commun, reliées par le fait que les deux estiment la même matrice.
+The cross-module oracle: at `lambda = 0`, `u` is linear, `Y` is Gaussian, so
+`E[u|Y]` is **exactly affine**. The affine denoiser is then exact, and
+`Sigma^{(F)}_signal` (§3.2) equals `Sigma_signal` (§3.3, gradient). Two paths with no
+shared code, tied together by the fact that both estimate the same matrix.
 """
 
 import jax
@@ -33,13 +33,13 @@ def prior():
 
 @pytest.fixture
 def linear_model():
-    """`u(theta) = A theta` -- lineaire, donc `E[u|Y]` affine et le debruiteur exact."""
+    """`u(theta) = A theta` -- linear, so `E[u|Y]` is affine and the denoiser is exact."""
     A = jr.normal(jr.key(3), (P, Q))
     return lambda theta: A @ theta, A
 
 
 def _paired(u, prior, Sigma_obs, key, n):
-    """`(u(eta), Y = u(eta) + eps)` -- les memes paires que sample_Sigma_Y."""
+    """`(u(eta), Y = u(eta) + eps)` -- the same pairs as sample_Sigma_Y."""
     k_eta, k_eps = jr.split(key)
     eta = prior.sample(k_eta, n)
     u_vals = jax.vmap(u)(eta)
@@ -49,9 +49,9 @@ def _paired(u, prior, Sigma_obs, key, n):
 
 
 def test_affine_denoiser_recovers_linear_map(prior, linear_model):
-    """A `Sigma_obs -> 0`, le debruiteur doit retrouver `f(Y) = Y` (le bruit disparait).
+    """As `Sigma_obs -> 0`, the denoiser must recover `f(Y) = Y` (the noise vanishes).
 
-    Sans bruit, `Y = u(eta)` exactement, donc `E[u|Y] = Y` : `A -> I`, `b -> 0`.
+    Without noise, `Y = u(eta)` exactly, so `E[u|Y] = Y`: `A -> I`, `b -> 0`.
     """
     u, _ = linear_model
     Sigma_obs = 1e-6 * jnp.eye(P)
@@ -62,7 +62,7 @@ def test_affine_denoiser_recovers_linear_map(prior, linear_model):
 
 
 def test_residual_below_Sigma_obs(prior, linear_model):
-    """Prop. 3 : `R_f < Sigma_obs` -- condition d'existence de `Sigma^{(F)}_signal`."""
+    """Prop. 3: `R_f < Sigma_obs` -- the existence condition for `Sigma^{(F)}_signal`."""
     u, _ = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)
     u_vals, Y, _ = _paired(u, prior, Sigma_obs, jr.key(1), N_SAMPLES)
@@ -72,10 +72,10 @@ def test_residual_below_Sigma_obs(prior, linear_model):
 
 
 def test_signal_matches_gradient_at_lambda_zero(prior, linear_model):
-    """⭐ §3.2 == §3.3 en lineaire. Deux voies, meme matrice.
+    """⭐ §3.2 == §3.3 in the linear case. Two paths, same matrix.
 
-    A `lambda = 0`, `E[u|Y]` est affine (modele lineaire, tout gaussien), donc le
-    debruiteur affine est exact et `Sigma^{(F)}_signal` egale `Sigma_signal` gradient.
+    At `lambda = 0`, `E[u|Y]` is affine (linear model, everything Gaussian), so the
+    affine denoiser is exact and `Sigma^{(F)}_signal` equals the gradient `Sigma_signal`.
     """
     u, _ = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)
@@ -86,7 +86,7 @@ def test_signal_matches_gradient_at_lambda_zero(prior, linear_model):
         prior,
         Sigma_obs,
         key,
-        64,  # gradient exact des 1 echantillon (Jac constante)
+        64,  # exact gradient from 1 sample (constant Jacobian)
     )
     u_vals, Y, _ = _paired(u, prior, Sigma_obs, key, N_SAMPLES)
     Sigma_signal_approx = approximation_signal(u_vals, Y, Sigma_obs)
@@ -99,7 +99,7 @@ def test_signal_matches_gradient_at_lambda_zero(prior, linear_model):
 
 
 def test_signal_matches_sample_Sigma_Y_at_lambda_zero(prior, linear_model):
-    """Coherence avec §3.1 : en lineaire `Sigma_signal = Sigma_Y` (Rem. 2.2)."""
+    """Consistency with §3.1: in the linear case `Sigma_signal = Sigma_Y` (Rem. 2.2)."""
     u, A = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)
     key = jr.key(4)
@@ -114,7 +114,7 @@ def test_signal_matches_sample_Sigma_Y_at_lambda_zero(prior, linear_model):
 
 
 def test_noise_preceq_signal(prior, linear_model):
-    """`g` voit theta en plus de Y, donc debruite mieux :
+    """`g` sees theta in addition to Y, so it denoises better:
     `R_g <= R_f`, `Sigma_noise <= Sigma_signal`"""
     u, _ = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)

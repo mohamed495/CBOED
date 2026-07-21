@@ -1,16 +1,17 @@
-r"""Quasi-optimalité -- Proposition 1.
+r"""Quasi-optimality -- Proposition 1.
 
-Le gap n'est pas un scalaire opaque : c'est une **somme de log-valeurs propres
-généralisées**, et sa répartition décide laquelle des deux stratégies est utilisable.
+The gap is not an opaque scalar: it is a **sum of generalized log-eigenvalues**,
+and its distribution decides which of the two strategies is usable.
 
-Prop. 1 pose les deux problèmes aux valeurs propres généralisées
+Prop. 1 poses the two generalized eigenvalue problems
 
 .. math::
     \Sigma_Y u_i = \alpha_i \Sigma_{\rm signal} u_i, \qquad
     \Sigma_{Y|\theta} v_i = \beta_i \Sigma_{\rm noise} v_i
 
-avec ``alpha_i, beta_i >= 1`` (car ``Sigma_Y ⪰ Sigma_signal`` et
-``Sigma_{Y|theta} ⪰ Sigma_noise``), et borne la sous-optimalité des designs gloutons :
+with ``alpha_i, beta_i >= 1`` (since ``Sigma_Y ⪰ Sigma_signal`` and
+``Sigma_{Y|theta} ⪰ Sigma_noise``), and bounds the suboptimality of the greedy
+designs:
 
 .. math::
     \mathrm{EIG}(W^{\rm inc}_m) &\ge \max_W \mathrm{EIG}(W)
@@ -18,33 +19,34 @@ avec ``alpha_i, beta_i >= 1`` (car ``Sigma_Y ⪰ Sigma_signal`` et
     \mathrm{EIG}(W^{\rm cons}_m) &\ge \max_W \mathrm{EIG}(W)
         - \sum_{i=1}^{d-m} \tfrac{\ln\alpha_i + \ln\beta_i}{2}
 
-L'identité qui relie tout
--------------------------
-En sommant toutes les valeurs propres,
+The identity that ties everything together
+--------------------------------------------
+Summing all the eigenvalues,
 
 .. math::
     \sum_i (\ln\alpha_i + \ln\beta_i) = 2\,\mathrm{gap}(I_p).
 
-Le gap au design complet est donc la somme des contributions spectrales
+The gap at the full design is therefore the sum of the spectral
+contributions
 
 .. math::
     t_i = \frac{\ln\alpha_i+\ln\beta_i}{2}.
 
-Les constantes de la Proposition 1 sont simplement des sommes partielles de ces
-contributions :
+The constants of Proposition 1 are simply partial sums of these
+contributions:
 
-* incrémental : ``\sum_{i=1}^{m} t_i`` ;
-* conservatif : ``\sum_{i=1}^{d-m} t_i``.
+* incremental: ``\sum_{i=1}^{m} t_i``;
+* conservative: ``\sum_{i=1}^{d-m} t_i``.
 
-Les deux utilisent les mêmes contributions spectrales, mais avec un nombre de termes
-différent. La constante incrémentale est donc croissante avec le budget ``m``, tandis
-que la constante conservative est décroissante.
+Both use the same spectral contributions, but with a different number of
+terms. The incremental constant is therefore increasing with the budget
+``m``, while the conservative constant is decreasing.
 
-Cas standard
-------------
-``Sigma_{Y|theta} = Sigma_noise = Sigma_obs`` **exactement**, donc ``beta_i = 1`` pour
-tout ``i`` et ``ln beta_i = 0`` : la sous-optimalité ne dépend que de ``alpha``. Le
-cadre standard isole ``gap_G``, y compris spectralement.
+Standard case
+-------------
+``Sigma_{Y|theta} = Sigma_noise = Sigma_obs`` **exactly**, so ``beta_i = 1``
+for all ``i`` and ``ln beta_i = 0``: the suboptimality then depends only on
+``alpha``. The standard setting isolates ``gap_G``, spectrally as well.
 """
 
 from dataclasses import dataclass
@@ -62,33 +64,34 @@ from cboed.bounds.base import DiagnosticMatrices
 @jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class QuasiOptimality:
-    """Le spectre du gap et ce qu'il coûte."""
+    """The spectrum of the gap and what it costs."""
 
     alpha: Float[Array, " n_obs"]
-    """Valeurs propres de ``(Sigma_Y, Sigma_signal)``, **décroissantes**. ``>= 1``."""
+    """Eigenvalues of ``(Sigma_Y, Sigma_signal)``, **decreasing**. ``>= 1``."""
 
     beta: Float[Array, " n_obs"]
-    """Valeurs propres de ``(Sigma_Y_given_theta, Sigma_noise)``, décroissantes. ``>= 1``.
+    """Eigenvalues of ``(Sigma_Y_given_theta, Sigma_noise)``, decreasing. ``>= 1``.
 
-    Identiquement 1 en cadre standard : les deux matrices y valent ``Sigma_obs``.
+    Identically 1 in the standard setting: both matrices equal ``Sigma_obs``
+    there.
     """
 
     def suboptimality(self, n_sensors: int, strategy: str = "incremental") -> float:
-        """Borne sur ``max_W EIG(W) - EIG(W_greedy)`` -- éq. (22)/(23).
+        """Bound on ``max_W EIG(W) - EIG(W_greedy)`` -- eq. (22)/(23).
 
         Parameters
         ----------
         n_sensors : int
             Budget ``m``.
         strategy : {"incremental", "conservative"}
-            Incrémental : somme des ``m`` **premières** (les plus grandes).
-            Conservatif : somme des ``d - m`` **dernières**.
+            Incremental: sum of the **first** ``m`` (the largest).
+            Conservative: sum of the **last** ``d - m``.
 
         Notes
         -----
-        La constante **croît avec m** en incrémental et **décroît** en conservatif.
-        Petit budget -> incrémental ; grand budget -> conservatif. Complémentaires,
-        pas concurrentes.
+        The constant **grows with m** in the incremental strategy and
+        **shrinks** in the conservative one. Small budget -> incremental;
+        large budget -> conservative. Complementary, not competing.
         """
         terms = 0.5 * (jnp.log(self.alpha) + jnp.log(self.beta))
         if strategy == "incremental":
@@ -99,12 +102,12 @@ class QuasiOptimality:
         raise ValueError(f"strategy must be incremental|conservative, got {strategy}")
 
     def crossover(self) -> int:
-        """Premier budget où la borne conservative devient plus serrée.
+        """First budget at which the conservative bound becomes tighter.
 
-        Les constantes des équations (22) et (23) sont monotones en sens opposés.
-        Cette méthode renvoie le premier ``m`` pour lequel la borne conservative est
-        plus petite que la borne incrémentale ; si cela n'arrive pas, elle renvoie
-        ``p``.
+        The constants in equations (22) and (23) are monotone in opposite
+        directions. This method returns the first ``m`` for which the
+        conservative bound is smaller than the incremental bound; if that
+        never happens, it returns ``p``.
         """
         p = self.alpha.shape[0]
         gaps = [
@@ -118,17 +121,17 @@ class QuasiOptimality:
     def total_gap(self) -> float:
         """``gap(I_p) = ½ sum (ln alpha_i + ln beta_i)``.
 
-        Oracle : doit égaler ``incremental_bounds(diagnostics, None).gap``, calculé
-        par des ``slogdet`` qui ne diagonalisent rien.
+        Oracle: must equal ``incremental_bounds(diagnostics, None).gap``,
+        computed via ``slogdet`` calls that diagonalize nothing.
         """
         return float(0.5 * jnp.sum(jnp.log(self.alpha) + jnp.log(self.beta)))
 
     @property
     def effective_rank(self) -> int:
-        """Nombre minimal de contributions spectrales expliquant 90 % du gap total.
+        """Minimal number of spectral contributions explaining 90% of the total gap.
 
-        Il s'agit d'un indicateur de concentration spectrale : une faible valeur
-        signifie que le gap est dominé par un petit nombre de modes.
+        This is a spectral concentration indicator: a low value means the
+        gap is dominated by a small number of modes.
         """
         terms = 0.5 * (jnp.log(self.alpha) + jnp.log(self.beta))
         total = jnp.sum(terms)
@@ -143,11 +146,11 @@ def generalized_eigenvalues(
     A: Float[Array, "n_obs n_obs"],
     B: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, " n_obs"]:
-    r"""Valeurs propres de ``A u = alpha B u``, décroissantes. ``B`` SDP.
+    r"""Eigenvalues of ``A u = alpha B u``, decreasing. ``B`` SDP.
 
-    Par Cholesky de ``B`` puis ``eigvalsh`` de ``L^{-1} A L^{-T}`` : JAX n'a pas de
-    ``eigh`` généralisé, et former ``B^{-1}A`` détruirait la symétrie **et** le
-    conditionnement.
+    Via Cholesky of ``B`` then ``eigvalsh`` of ``L^{-1} A L^{-T}``: JAX has no
+    generalized ``eigh``, and forming ``B^{-1}A`` would destroy both the
+    symmetry **and** the conditioning.
     """
     L = jsp.linalg.cho_factor(B, lower=True)[0]
     L = jnp.tril(L)
@@ -159,13 +162,13 @@ def generalized_eigenvalues(
 @jax.jit
 @jaxtyped(typechecker=beartype)
 def quasi_optimality(diagnostics: DiagnosticMatrices) -> QuasiOptimality:
-    """Le spectre du gap -- Prop. 1.
+    """The spectrum of the gap -- Prop. 1.
 
     Notes
     -----
-    ⚠️ ``eigvalsh`` sur des ``p x p`` denses : c'est un **diagnostic**, pas un chemin
-    de production. Les bornes et le greedy n'en ont jamais besoin -- eux passent par
-    Cholesky et compléments de Schur.
+    ⚠️ ``eigvalsh`` on dense ``p x p`` matrices: this is a **diagnostic**, not
+    a production path. The bounds and the greedy algorithm never need it --
+    they go through Cholesky and Schur complements instead.
     """
     return QuasiOptimality(
         alpha=generalized_eigenvalues(diagnostics.Sigma_Y, diagnostics.Sigma_signal),

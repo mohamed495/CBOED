@@ -1,12 +1,12 @@
-# r"""Orchestration figures pour λ=0.0 -- cas linéaire-gaussien (avec estimations MC).
+# r"""Figure orchestration for λ=0.0 -- linear-Gaussian case (with MC estimates).
 
-# Génère les matrices estimées par Monte-Carlo:
+# Generates the matrices estimated by Monte Carlo:
 #   - Σ_Y : Cov(u(θ)) via sample_Sigma_Y()
 #   - Σ_signal, Σ_noise : via gradient_diagnostics_standard()
-#   - Σ_Y|θ = Σ_obs (exact en cas standard)
+#   - Σ_Y|θ = Σ_obs (exact in the standard case)
 
-# Les résultats sont visualisés dans 5 figures.
-# Sortie : outputs/lambda_0p0/
+# The results are visualized in 5 figures.
+# Output: outputs/lambda_0p0/
 # """
 
 # from pathlib import Path
@@ -22,63 +22,63 @@
 
 
 # def main():
-#     """Pipeline complet λ=0.0."""
+#     """Full pipeline λ=0.0."""
 #     use_style()
 #     output_dir = Path("outputs/lambda_0p0")
 #     output_dir.mkdir(parents=True, exist_ok=True)
 
 #     print("=" * 70)
-#     print("Orchestration figures | λ = 0.0 (linéaire-gaussien, MC)")
+#     print("Figure orchestration | λ = 0.0 (linear-Gaussian, MC)")
 #     print("=" * 70)
 
 #     # -----------------------------------------------------------------------
 #     # 1. Configuration
 #     # -----------------------------------------------------------------------
 #     lambda_ = 0.0
-#     n_samples = 1000  # Estimations MC
+#     n_samples = 1000  # MC estimates
 #     prior = make_prior()
 #     model = make_model(lambda_)
-#     u = forward(lambda_)  # Modèle forward sans design
+#     u = forward(lambda_)  # Forward model without design
 
 #     print(f"\n[Setup]")
 #     print(f"  λ = {lambda_}")
-#     print(f"  Prior : GP Matérn32(σ={prior.prior.kernel.sigma:.2f}, ℓ={prior.prior.kernel.length_scale:.2f})")
+#     print(f"  Prior: GP Matern32(σ={prior.prior.kernel.sigma:.2f}, ℓ={prior.prior.kernel.length_scale:.2f})")
 #     print(f"  n_samples (MC) = {n_samples}")
 
 #     # -----------------------------------------------------------------------
-#     # 2. Estimer les matrices par Monte-Carlo
+#     # 2. Estimate the matrices by Monte Carlo
 #     # -----------------------------------------------------------------------
-#     print(f"\n[Estimation MC]")
+#     print(f"\n[MC estimation]")
 #     key = jr.key(42)
 #     k1, k2, k3 = jr.split(key, 3)
 
-#     # Sigma_Y par échantillonnage paired differences
+#     # Sigma_Y via paired-differences sampling
 #     Sigma_Y = sample_Sigma_Y(u, prior, SIGMA_OBS_MATRIX, k1, n_samples)
-#     print(f"  Σ_Y estimée (pairs MC)")
+#     print(f"  Σ_Y estimated (pairs MC)")
 
-#     # Sigma_signal, Sigma_noise par gradient
+#     # Sigma_signal, Sigma_noise via gradient
 #     Sigma_signal, Sigma_noise = gradient_diagnostics_standard(
 #         u, prior, SIGMA_OBS_MATRIX, k2, n_samples
 #     )
-#     print(f"  Σ_signal, Σ_noise estimées (gradient)")
+#     print(f"  Σ_signal, Σ_noise estimated (gradient)")
 
-#     # Sigma_Y_given_theta par échantillonnage avec changement de variables
-#     # En cas standard : B = Identity, Sigma_xi ≈ 0
+#     # Sigma_Y_given_theta via sampling with change of variables
+#     # In the standard case: B = Identity, Sigma_xi ≈ 0
 #     n_param = prior.mu.shape[0]
 #     B = jnp.eye(n_param)
 #     Sigma_xi = 1e-8 * jnp.eye(n_param)
 #     Sigma_Y_given_theta = sample_Sigma_Y_given_theta(
 #         u, prior, B, SIGMA_OBS_MATRIX, Sigma_xi, k3, n_samples
 #     )
-#     print(f"  Σ_Y|θ estimée (sample)")
+#     print(f"  Σ_Y|θ estimated (sample)")
 
 #     # Prior covariance
 #     Sigma_theta = prior.Sigma()
 
 #     # -----------------------------------------------------------------------
-#     # 3. Spectres
+#     # 3. Spectra
 #     # -----------------------------------------------------------------------
-#     print(f"\n[Spectres]")
+#     print(f"\n[Spectra]")
 #     eigs_theta = jnp.sort(jnp.linalg.eigvalsh(Sigma_theta))[::-1]
 #     eigs_signal = jnp.sort(jnp.linalg.eigvalsh(Sigma_signal))[::-1]
 #     eigs_Y = jnp.sort(jnp.linalg.eigvalsh(Sigma_Y))[::-1]
@@ -93,36 +93,36 @@
 #     # -----------------------------------------------------------------------
 #     print(f"\n[Figures]")
 
-#     # Figure 1 : Σ_theta seul
+#     # Figure 1: Σ_theta alone
 #     fig1, ax = __import__("matplotlib.pyplot", fromlist=["subplots"]).subplots(figsize=(6, 5))
 #     im1 = ax.imshow(Sigma_theta, cmap="viridis")
 #     ax.set_title(r"$\Sigma_\theta$ (prior GP)")
-#     ax.set_xlabel("Indice paramètre j")
-#     ax.set_ylabel("Indice paramètre i")
+#     ax.set_xlabel("Parameter index j")
+#     ax.set_ylabel("Parameter index i")
 #     __import__("matplotlib.pyplot", fromlist=["colorbar"]).colorbar(im1, ax=ax, label="covariance")
 #     fig1.tight_layout()
 #     path1 = save(fig1, output_dir / "01_Sigma_theta.png")
 #     print(f"  → {path1.name}")
 
-#     # Figure 2 : Σ_Y et Σ_signal (numérateur)
+#     # Figure 2: Σ_Y and Σ_signal (numerator)
 #     fig2 = plot_matrix_comparison(
 #         [Sigma_Y, Sigma_signal],
 #         labels=[r"$\Sigma_Y$ (MC)", r"$\Sigma_{\mathrm{signal}}$ (gradient)"],
-#         title=rf"Numérateur : $\Sigma_Y$ vs $\Sigma_{{\mathrm{{signal}}}}$ | $\lambda = {lambda_:.2f}$"
+#         title=rf"Numerator: $\Sigma_Y$ vs $\Sigma_{{\mathrm{{signal}}}}$ | $\lambda = {lambda_:.2f}$"
 #     )
 #     path2 = save(fig2, output_dir / "02_numerator.png")
 #     print(f"  → {path2.name}")
 
-#     # Figure 3 : Σ_Y|θ et Σ_noise (dénominateur)
+#     # Figure 3: Σ_Y|θ and Σ_noise (denominator)
 #     fig3 = plot_matrix_comparison(
 #         [Sigma_Y_given_theta, Sigma_noise],
 #         labels=[r"$\Sigma_{Y|\theta}$ (exact)", r"$\Sigma_{\mathrm{noise}}$ (gradient)"],
-#         title=rf"Dénominateur : $\Sigma_{{Y|\theta}}$ vs $\Sigma_{{\mathrm{{noise}}}}$ | $\lambda = {lambda_:.2f}$"
+#         title=rf"Denominator: $\Sigma_{{Y|\theta}}$ vs $\Sigma_{{\mathrm{{noise}}}}$ | $\lambda = {lambda_:.2f}$"
 #     )
 #     path3 = save(fig3, output_dir / "03_denominator.png")
 #     print(f"  → {path3.name}")
 
-#     # Figure 4 : Spectres
+#     # Figure 4: Spectra
 #     fig4, ax = __import__("matplotlib.pyplot", fromlist=["subplots"]).subplots(figsize=(8, 5))
 #     n_show = 50
 #     ax.semilogy(range(n_show), eigs_theta[:n_show], "o-", label=r"$\Sigma_\theta$",
@@ -134,32 +134,32 @@
 #     ax.semilogy(range(n_show), eigs_noise[:n_show], "d-", label=r"$\Sigma_{\mathrm{noise}}$",
 #                 color=COLORS["Sigma_noise"], lw=1.5, markersize=4)
 #     ax.set_xlabel("Mode index $i$")
-#     ax.set_ylabel("Valeur propre")
+#     ax.set_ylabel("Eigenvalue")
 #     ax.legend(fontsize=9)
 #     ax.grid(True, alpha=0.3)
-#     ax.set_title(rf"Spectres (MC+gradient) | $\lambda = {lambda_:.2f}$")
+#     ax.set_title(rf"Spectra (MC+gradient) | $\lambda = {lambda_:.2f}$")
 #     fig4.tight_layout()
 #     path4 = save(fig4, output_dir / "04_spectra.png")
 #     print(f"  → {path4.name}")
 
-#     # Figure 5 : Jacobienne
+#     # Figure 5: Jacobian
 #     J = model.jacobian(prior.mu, None)
 #     fig5, ax = __import__("matplotlib.pyplot", fromlist=["subplots"]).subplots(figsize=(6, 5))
 #     im5 = ax.imshow(J, aspect="auto", cmap="viridis")
-#     ax.set_xlabel("Indice observé")
-#     ax.set_ylabel("Indice de paramètre")
-#     ax.set_title(rf"Jacobienne $J$ (Burgers, $\lambda = {lambda_:.2f}$)")
+#     ax.set_xlabel("Observed index")
+#     ax.set_ylabel("Parameter index")
+#     ax.set_title(rf"Jacobian $J$ (Burgers, $\lambda = {lambda_:.2f}$)")
 #     __import__("matplotlib.pyplot", fromlist=["colorbar"]).colorbar(im5, ax=ax)
 #     fig5.tight_layout()
 #     path5 = save(fig5, output_dir / "05_jacobian.png")
 #     print(f"  → {path5.name}")
 
 #     # -----------------------------------------------------------------------
-#     # 5. Résumé
+#     # 5. Summary
 #     # -----------------------------------------------------------------------
-#     print(f"\n[Résumé]")
-#     print(f"  Estimations MC avec {n_samples} paires d'échantillons")
-#     print(f"  Figures sauvegardées dans : {output_dir.resolve()}")
+#     print(f"\n[Summary]")
+#     print(f"  MC estimates with {n_samples} sample pairs")
+#     print(f"  Figures saved to: {output_dir.resolve()}")
 #     print("=" * 70)
 
 
@@ -167,19 +167,18 @@
 #     main()
 
 #!/usr/bin/env python
-r"""Produit toutes les figures.
+r"""Produces all figures.
 
-Séparation : ce script **calcule** (avec cache disque) et appelle ``cboed.viz``, qui
-ne fait que dessiner. Aucune figure n'est construite ici, aucun calcul n'est fait
-là-bas.
+Separation: this script **computes** (with a disk cache) and calls ``cboed.viz``,
+which only draws. No figure is built here, no computation is done there.
 
-Le cache
+The cache
 --------
-Les quatre matrices diagnostiques sont **tout** le coût : une fois calculées, les
-bornes sont des ``slogdet`` de sous-matrices, le greedy est ``O(m p^2)``, le spectre
-un ``eigvalsh``. Un ``.npz`` par ``(lambda, N)`` et retracer devient instantané.
+The four diagnostic matrices are **all** the cost: once computed, the
+bounds are ``slogdet`` of submatrices, the greedy is ``O(m p^2)``, the spectrum
+an ``eigvalsh``. One ``.npz`` per ``(lambda, N)`` and replotting becomes instant.
 
-``--force`` pour recalculer.
+``--force`` to recompute.
 
 Usage
 -----
@@ -226,29 +225,29 @@ from cboed.viz import matrices as vm
 from cboed.viz import spectrum as vs
 from cboed.viz.style import save, use_style
 
-M_GREEDY = 8  # GreedyBatchReopt est en O(m^2 * n_candidates) : ~23 000 evaluations a m=8
+M_GREEDY = 8  # GreedyBatchReopt is O(m^2 * n_candidates): ~23,000 evaluations at m=8
 
 N_SAMPLES = 20_000
 N_GRADIENT = 500
 M_MAX = max(SENSOR_BUDGETS)
-X = np.linspace(DOMAIN[0], DOMAIN[1], N + 2)[1:-1]  # points INTERIEURS
+X = np.linspace(DOMAIN[0], DOMAIN[1], N + 2)[1:-1]  # INTERIOR points
 
 
 def fig_greedy(d: dict, out: Path) -> None:
-    """Trois gloutons, **un seul critere** -- a `lambda = 0` uniquement.
+    """Three greedy strategies, **a single criterion** -- at `lambda = 0` only.
 
-    A `lambda = 0` le modele est lineaire, donc `EIG.evaluate` est exacte et
-    `incremental_lower = incremental_upper = EIG` (Rem. 2.2). Les trois strategies
-    optimisent alors la **meme** quantite : la figure compare des *algorithmes*.
+    At `lambda = 0` the model is linear, so `EIG.evaluate` is exact and
+    `incremental_lower = incremental_upper = EIG` (Rem. 2.2). The three strategies
+    then optimize the **same** quantity: the figure compares *algorithms*.
 
-    A `lambda > 0` elle ne le ferait plus -- `greedy_schur` maximise une borne,
-    `GreedyOptimizer` maximise Laplace. Deux criteres, pas deux algorithmes.
+    At `lambda > 0` it would no longer do so -- `greedy_schur` maximizes a bound,
+    `GreedyOptimizer` maximizes Laplace. Two criteria, not two algorithms.
 
-    Attendu :
-        naif == schur          (`greedy.py` est l'oracle de `greedy_schur.py`)
-        batch >= naif          (la reoptimisation corrige les erreurs d'etapes
-                                anterieures ; a l'egalite, le greedy simple etait
-                                deja optimal sur ce probleme)
+    Expected:
+        naive == schur          (`greedy.py` is the oracle of `greedy_schur.py`)
+        batch >= naive          (reoptimization corrects earlier-step errors;
+                                at equality, the simple greedy was already
+                                optimal on this problem)
     """
     prior, model = make_prior(), make_model(0.0)
     inference = LinearModel(
@@ -265,8 +264,8 @@ def fig_greedy(d: dict, out: Path) -> None:
     )
 
     designs = {
-        "naif (boite noire)": np.asarray(r_naive.design),
-        "batch (reoptimise)": np.asarray(r_batch.design),
+        "naive (black-box)": np.asarray(r_naive.design),
+        "batch (reoptimized)": np.asarray(r_batch.design),
         "schur $O(m p^2)$": np.asarray(r_schur.design),
     }
     save(
@@ -274,39 +273,39 @@ def fig_greedy(d: dict, out: Path) -> None:
         out / "15_greedy_designs.png",
     )
 
-    # tous evalues a l'EIG exacte : sinon on comparerait des criteres
+    # all evaluated at the exact EIG: otherwise we would be comparing criteria
     scores = {
         label: np.array([float(criterion.evaluate(prior.mu, jnp.asarray(W[:m]))) for m in ms])
         for label, W in designs.items()
     }
     save(
-        vd.plot_greedy_comparison(ms, scores, r"$\lambda = 0$ -- EIG exacte"),
+        vd.plot_greedy_comparison(ms, scores, r"$\lambda = 0$ -- exact EIG"),
         out / "16_greedy_scores.png",
     )
 
-    # cout : le nombre d'evaluations du critere, pas le temps mur
+    # cost: the number of criterion evaluations, not wall-clock time
     costs = {
-        "naif": np.array([m * N for m in ms]),
+        "naive": np.array([m * N for m in ms]),
         "batch (~)": np.array([m * N + 3 * N * m * (m + 1) // 2 for m in ms]),
-        "schur": np.array([m * N**2 * 1e-6 for m in ms]),  # p^2 flops, pas d'evaluation
+        "schur": np.array([m * N**2 * 1e-6 for m in ms]),  # p^2 flops, not an evaluation
     }
     save(
-        vd.plot_greedy_cost(ms, costs, "evaluations du critere (schur : $p^2$ flops)"),
+        vd.plot_greedy_cost(ms, costs, "criterion evaluations (schur: $p^2$ flops)"),
         out / "17_greedy_cost.png",
     )
 
 
 # =============================================================================
-# Calcul + cache
+# Compute + cache
 # =============================================================================
 
 
 def compute(lambda_: float):
-    """Les quatre matrices et les moments. Tout le coût du modèle est ici.
+    """The four matrices and the moments. All the model's cost is here.
 
-    Cadre standard : Prop. 2 pose ``Sigma_{Y|theta} = Sigma_noise = Sigma_obs``
-    exactement -- pas de :func:`gradient_diagnostics` avec ``h = id`` et ``Sigma_xi``
-    minuscule, dont la limite est singulière.
+    Standard setting: Prop. 2 sets ``Sigma_{Y|theta} = Sigma_noise = Sigma_obs``
+    exactly -- no :func:`gradient_diagnostics` with ``h = id`` and a tiny
+    ``Sigma_xi``, whose limit is singular.
     """
     prior, u = make_prior(), forward(lambda_)
     k_sample, k_grad = jr.split(jr.key(0))
@@ -334,7 +333,7 @@ def load(lambda_: float, cache_dir: Path, force: bool) -> dict:
     if path.exists() and not force:
         print(f"  cache  {path.name}")
         return dict(np.load(path))
-    print(f"  calcul lambda={lambda_} ...", flush=True)
+    print(f"  computing lambda={lambda_} ...", flush=True)
     data = compute(lambda_)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, **data)
@@ -357,11 +356,11 @@ def as_diagnostics(d: dict) -> DiagnosticMatrices:
 
 
 def fig_reconstruction(lambda_: float, design, out: Path) -> None:
-    """Prior, posterieur, ``theta_vrai``.
+    """Prior, posterior, ``theta_true``.
 
-    La posterieure est calculee explicitement (Laplace linearisee en ``mu_prior``)
-    plutot que lue depuis ``LinearModel._mu`` : c'est du detail d'implementation, et
-    ecrire la mise a jour rend visible ce qu'elle approxime.
+    The posterior is computed explicitly (Laplace linearized at ``mu_prior``)
+    rather than read from ``LinearModel._mu``: this is an implementation
+    detail, and writing out the update makes visible what it approximates.
     """
     prior, model = make_prior(), make_model(lambda_)
     k_true, k_noise, k_prior, k_post = jr.split(jr.key(42), 4)
@@ -418,11 +417,12 @@ def fig_matrices(lambda_: float, d: dict, out: Path) -> None:
 
 
 def fig_linear_vs_nonlinear(data: dict, out: Path) -> None:
-    """``H(u)`` a plusieurs ``lambda`` -- la validation visuelle.
+    """``H(u)`` at several ``lambda`` -- the visual validation.
 
-    ``H(u) = 0`` **exactement** en lineaire (jacobienne constante). C'est la seule
-    quantite qui distingue Prop. 4 d'un calcul lineaire-gaussien : la voir vide a
-    ``lambda=0`` et pleine ensuite valide la branche.
+    ``H(u) = 0`` **exactly** in the linear case (constant Jacobian). This is
+    the only quantity that distinguishes Prop. 4 from a linear-Gaussian
+    computation: seeing it empty at ``lambda=0`` and populated afterward
+    validates the branch.
     """
     lams = sorted(data)
     save(
@@ -430,7 +430,7 @@ def fig_linear_vs_nonlinear(data: dict, out: Path) -> None:
             [data[lam]["H"] for lam in lams],
             [rf"$H(u)$, $\lambda = {lam}$" for lam in lams],
             reference=0,
-            title=r"$H(u)$ : nulle en lineaire, structuree sinon",
+            title=r"$H(u)$: zero in the linear case, structured otherwise",
         ),
         out / "05_H_vs_lambda.png",
     )
@@ -439,14 +439,14 @@ def fig_linear_vs_nonlinear(data: dict, out: Path) -> None:
             [data[lam]["Sigma_Y"] for lam in lams] + [data[lam]["Sigma_signal"] for lam in lams],
             [rf"$\Sigma_Y$, $\lambda={lam}$" for lam in lams]
             + [rf"$\Sigma_{{signal}}$, $\lambda={lam}$" for lam in lams],
-            title="Spectres : l'ecart pilote les log-dets, donc les bornes",
+            title="Spectra: the gap drives the log-dets, hence the bounds",
         ),
         out / "06_spectra.png",
     )
 
 
 def fig_bounds(lambda_: float, d: dict, out: Path):
-    """Deux designs, quatre bornes chacun -- le protocole du papier §2."""
+    """Two designs, four bounds each -- the paper protocol Sec. 2."""
     dg = as_diagnostics(d)
     strategies = {
         "iEIG$\\geq$ (19)": (dg.Sigma_signal, dg.Sigma_Y_given_theta),
@@ -466,10 +466,10 @@ def fig_bounds(lambda_: float, d: dict, out: Path):
             rows["cons_low"].append(float(c.lower))
             rows["cons_up"].append(float(c.upper))
         per_strategy[label] = {k: np.array(v) for k, v in rows.items()}
-        widths[f"largeur inc -- {label}"] = (
+        widths[f"width inc -- {label}"] = (
             per_strategy[label]["inc_up"] - per_strategy[label]["inc_low"]
         )
-        widths[f"largeur cons -- {label}"] = (
+        widths[f"width cons -- {label}"] = (
             per_strategy[label]["cons_up"] - per_strategy[label]["cons_low"]
         )
 
@@ -510,7 +510,7 @@ def fig_spectrum(lambda_: float, d: dict, out: Path) -> None:
         ),
         out / f"10_gap_decomposition_lambda_{lambda_:.2f}.png",
     )
-    # echelle de l'EIG : la borne SUP incrementale au budget max
+    # EIG scale: the incremental UPPER bound at the max budget
     W = greedy_schur(dg.Sigma_signal, dg.Sigma_Y_given_theta, M_MAX).design
     eig_scale = float(incremental_bounds(dg, W).upper)
     save(
@@ -530,13 +530,13 @@ def fig_designs(lambda_: float, d: dict, designs: dict, out: Path) -> None:
         vd.plot_sensor_positions(X, designs, m=M_MAX, title=rf"$\lambda = {lambda_}$"),
         out / f"12_sensors_lambda_{lambda_:.2f}.png",
     )
-    # ou la non-gaussianite se loge : la diagonale de Sigma_Y - Sigma_signal
+    # where the non-Gaussianity resides: the diagonal of Sigma_Y - Sigma_signal
     save(
         vd.plot_design_on_field(
             X,
             np.diag(d["Sigma_Y"] - d["Sigma_signal"]),
             designs,
-            title=r"capteurs et $\mathrm{diag}(\Sigma_Y - \Sigma_{signal})$",
+            title=r"sensors and $\mathrm{diag}(\Sigma_Y - \Sigma_{signal})$",
         ),
         out / f"13_design_on_gap_lambda_{lambda_:.2f}.png",
     )
@@ -550,7 +550,7 @@ def fig_gap_vs_lambda(data: dict, out: Path) -> None:
             lams,
             gaps,
             mc_floor=abs(gaps[0]) if lams[0] == 0.0 else None,
-            title="gap($I_p$) -- non-gaussianite de $Y$",
+            title="gap($I_p$) -- non-Gaussianity of $Y$",
         ),
         out / "14_gap_vs_lambda.png",
     )
@@ -572,7 +572,7 @@ def main() -> None:
     use_style()
     out, cache = Path(args.out), Path(args.cache)
 
-    print("Diagnostiques")
+    print("Diagnostics")
     data = {lam: load(lam, cache, args.force) for lam in args.lambdas}
 
     print("Figures")

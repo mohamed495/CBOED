@@ -10,12 +10,12 @@ from jaxtyping import Float
 class DiagnosticMatrices:
     r"""``Sigma_Y``, ``Sigma_Y_given_theta``, ``Sigma_signal``, ``Sigma_noise``.
 
-    Elles proviennent de **deux sources distinctes**, jamais d'une seule :
+    They come from **two distinct sources**, never a single one:
 
     ===================  ==========================  ====================
-    Matrices             Voie                        Alternative
+    Matrices             Route                       Alternative
     ===================  ==========================  ====================
-    ``Sigma_Y``,         §3.1 sample-based (26)(27)  aucune
+    ``Sigma_Y``,         §3.1 sample-based (26)(27)  none
     ``Sigma_Y_given_theta``
     ``Sigma_signal``,    §3.3 gradient, Prop. 4      §3.2 approximation
     ``Sigma_noise``
@@ -28,27 +28,27 @@ class DiagnosticMatrices:
     Sigma_Y_given_theta : Float[Array, "n_obs n_obs"]
         ``Sigma_obs + E[Cov(u(eta)|theta)]``.
     Sigma_signal : Float[Array, "n_obs n_obs"]
-        Borne sur l'information de Fisher : ``Sigma_signal^{-1} ⪰ I_Y``.
+        Bound on the Fisher information: ``Sigma_signal^{-1} ⪰ I_Y``.
     Sigma_noise : Float[Array, "n_obs n_obs"]
         ``Sigma_noise^{-1} ⪰ E[I_{Y|theta}]``.
     certified : bool
-        L'ordre de Loewner exigé par le théorème 2.1 est-il **garanti** ?
+        Is the Loewner order required by Theorem 2.1 **guaranteed**?
 
-        ``True`` pour la voie gradient (Prop. 4). ``False`` pour la voie
-        approximation (§3.2), dont l'inégalité part dans le **mauvais sens**
-        (``(Sigma^{(N,F)}_signal)^{-1} ⪯ I_Y``) : consistante quand ``N → ∞`` et
-        ``F → L²``, mais sans garantie à ``N`` fini. Le papier est explicite --
-        elle *cannot be safely used in Theorem 2.1*.
+        ``True`` for the gradient route (Prop. 4). ``False`` for the
+        approximation route (§3.2), whose inequality points the **wrong way**
+        (``(Sigma^{(N,F)}_signal)^{-1} ⪯ I_Y``): consistent as ``N → ∞`` and
+        ``F → L²``, but with no guarantee at finite ``N``. The paper is
+        explicit -- it *cannot be safely used in Theorem 2.1*.
 
     Notes
     -----
-    ⚠️ ``certified`` n'est pas décoratif. Une borne certifiée doit **refuser** un
-    diagnostic non certifié, ou dégrader son propre résultat -- jamais se taire.
-    C'est le seul moyen honnête de faire coexister deux voies dont une seule
-    certifie.
+    ⚠️ ``certified`` is not decorative. A certified bound must **refuse** an
+    uncertified diagnostic, or degrade its own result -- never stay silent.
+    That is the only honest way to let two routes coexist when only one of
+    them certifies.
 
-    ⚠️ À ne pas confondre avec ``BoundResult.is_certified`` (« le gap est-il sous
-    la tolérance ? »). Deux notions utiles, distinctes.
+    ⚠️ Not to be confused with ``BoundResult.is_certified`` ("is the gap below
+    the tolerance?"). Two useful, distinct notions.
     """
 
     Sigma_Y: Float[Array, "n_obs n_obs"]

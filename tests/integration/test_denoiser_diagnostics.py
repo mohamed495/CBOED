@@ -1,17 +1,17 @@
-"""§3.2 -- diagnostiques par débruiteur affine+réseau (`denoisers.py`, `approximation_based.py`).
+"""§3.2 -- diagnostics via affine+network denoiser (`denoisers.py`, `approximation_based.py`).
 
-Même protocole que `test_approximation_diagnostics.py` (débruiteur affine pur,
-`linear_approximation_based.py`), étendu au débruiteur composé
-`affine + reseau` (`ResidualDenoiser`). Deux jeux de modèles jouets :
+Same protocol as `test_approximation_diagnostics.py` (pure affine denoiser,
+`linear_approximation_based.py`), extended to the composed denoiser
+`affine + network` (`ResidualDenoiser`). Two sets of toy models:
 
-- `linear_model` : `u` linéaire -- le réseau n'a rien à apprendre (résidu
-  cible nul). Comparaisons sur le résidu `R` brut, jamais sur `Sigma_signal`/
-  `Sigma_noise` assemblées : `test_approximation_diagnostics.py` montre que
-  cette inversion est quasi singulière à `lambda = 0`, ce qui amplifie le
-  bruit d'estimation bien au-delà de ce que ces tests veulent vérifier.
-- `nonlinear_model` : `u` non linéaire -- ici le réseau a une raison d'être :
-  `R_g` (affine + réseau) doit être strictement plus petit que `R_f` (affine
-  seul), sinon `ResidualDenoiser` n'apporte rien.
+- `linear_model`: `u` is linear -- the network has nothing to learn (target
+  residual is zero). Comparisons are on the raw residual `R`, never on the
+  assembled `Sigma_signal`/`Sigma_noise`: `test_approximation_diagnostics.py`
+  shows that this inversion is nearly singular at `lambda = 0`, which amplifies
+  estimation noise far beyond what these tests intend to check.
+- `nonlinear_model`: `u` is nonlinear -- here the network has a reason to
+  exist: `R_g` (affine + network) must be strictly smaller than `R_f` (affine
+  alone), otherwise `ResidualDenoiser` adds nothing.
 """
 
 import jax
@@ -29,7 +29,7 @@ from cboed.priors.kernel import Matern32
 
 Q, P = 6, 6
 N_SAMPLES = 200_000
-NET_STEPS = 300  # petit budget d'entrainement : verification, pas convergence fine
+NET_STEPS = 300  # small training budget: verification, not fine convergence
 
 
 @pytest.fixture
@@ -40,17 +40,17 @@ def prior():
 
 @pytest.fixture
 def linear_model():
-    """`u(theta) = A theta` -- lineaire, le residu cible du reseau est nul."""
+    """`u(theta) = A theta` -- linear, the network's target residual is zero."""
     A = jr.normal(jr.key(3), (P, Q))
     return lambda theta: A @ theta, A
 
 
 @pytest.fixture
 def nonlinear_model():
-    """`u(theta) = A theta + c * sin(B theta)` -- non lineaire, residu non nul.
+    """`u(theta) = A theta + c * sin(B theta)` -- nonlinear, nonzero residual.
 
-    Le terme `sin` n'est pas affine : `E[u|Y]` s'ecarte de l'affine, et c'est
-    cet ecart que le reseau doit capter.
+    The `sin` term isn't affine: `E[u|Y]` deviates from the affine, and it is
+    this deviation the network must capture.
     """
     k_A, k_B = jr.split(jr.key(7))
     A = jr.normal(k_A, (P, Q))
@@ -60,7 +60,7 @@ def nonlinear_model():
 
 
 def _paired(u, prior, Sigma_obs, key, n):
-    """`(u(eta), Y = u(eta) + eps)` -- les memes paires que sample_Sigma_Y."""
+    """`(u(eta), Y = u(eta) + eps)` -- the same pairs as sample_Sigma_Y."""
     k_eta, k_eps = jr.split(key)
     eta = prior.sample(k_eta, n)
     u_vals = jax.vmap(u)(eta)
@@ -70,13 +70,13 @@ def _paired(u, prior, Sigma_obs, key, n):
 
 
 # ─────────────────────────────────────────────────────────
-# AffineDenoiser (equinox) == affine_denoiser (forme fermee standalone)
+# AffineDenoiser (equinox) == affine_denoiser (standalone closed form)
 # ─────────────────────────────────────────────────────────
 
 
 def test_affine_denoiser_module_matches_standalone_function(prior, linear_model):
-    """Les deux implementations affines (linear_approximation_based vs denoisers)
-    doivent rendre le meme `A`, `b` -- meme formule, deux code paths.
+    """The two affine implementations (linear_approximation_based vs denoisers)
+    must produce the same `A`, `b` -- same formula, two code paths.
     """
     u, _ = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)
@@ -90,19 +90,19 @@ def test_affine_denoiser_module_matches_standalone_function(prior, linear_model)
 
 
 # ─────────────────────────────────────────────────────────
-# Cas lineaire : le reseau n'a rien a apprendre
+# Linear case: the network has nothing to learn
 # ─────────────────────────────────────────────────────────
 
 
 def test_residual_denoiser_matches_affine_residual_when_linear(prior, linear_model):
-    """A `lambda = 0`, le reseau n'a rien a apprendre : le residu `R` (affine+net)
-    doit rester proche de celui de l'affine seul.
+    """At `lambda = 0`, the network has nothing to learn: the residual `R`
+    (affine+net) must stay close to that of the affine alone.
 
-    Comparaison sur `R` **brut** (avant l'inversion de Prop. 3), pas sur
-    `Sigma_signal` assemblee : celle-ci est quasi singuliere a ce point precis
-    (l'affine est quasi exacte, cf. test_approximation_diagnostics.py), et une
-    difference infime sur `R` y est amplifiee de facon incontrolable -- ce
-    n'est pas la propriete que ce test veut verifier.
+    Comparison on the **raw** `R` (before the Prop. 3 inversion), not on the
+    assembled `Sigma_signal`: the latter is nearly singular at this exact point
+    (the affine is nearly exact, cf. test_approximation_diagnostics.py), and an
+    infinitesimal difference on `R` gets amplified uncontrollably there -- that
+    is not the property this test intends to check.
     """
     u, _ = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)
@@ -120,14 +120,14 @@ def test_residual_denoiser_matches_affine_residual_when_linear(prior, linear_mod
 
 
 def test_noise_preceq_signal_with_residual_denoiser(prior, linear_model):
-    """`g` voit theta en plus de Y : `R_g <= R_f`.
+    """`g` sees theta in addition to Y: `R_g <= R_f`.
 
-    Teste sur les residus bruts (stable), pas sur `Sigma_signal`/`Sigma_noise`
-    assemblees -- meme raison que ci-dessus : l'inversion de Prop. 3 est
-    quasi singuliere a `lambda = 0` et amplifie le bruit d'estimation de `R`
-    au point de casser l'ordre attendu sur la matrice assemblee (cf.
-    test_approximation_diagnostics.py::test_noise_preceq_signal). L'ordre sur
-    `R` lui-meme, en amont de l'inversion, est la propriete verifiable.
+    Tested on the raw residuals (stable), not on the assembled
+    `Sigma_signal`/`Sigma_noise` -- same reason as above: the Prop. 3 inversion
+    is nearly singular at `lambda = 0` and amplifies the estimation noise on `R`
+    to the point of breaking the expected order on the assembled matrix (cf.
+    test_approximation_diagnostics.py::test_noise_preceq_signal). The order on
+    `R` itself, upstream of the inversion, is the property that can be checked.
     """
     u, _ = linear_model
     Sigma_obs = 0.01 * jnp.eye(P)
@@ -143,14 +143,14 @@ def test_noise_preceq_signal_with_residual_denoiser(prior, linear_model):
 
 
 # ─────────────────────────────────────────────────────────
-# Cas non lineaire : le reseau doit reduire le residu sous l'affine seul
+# Nonlinear case: the network must reduce the residual below the affine alone
 # ─────────────────────────────────────────────────────────
 
 
 def test_residual_denoiser_beats_affine_when_nonlinear(prior, nonlinear_model):
-    """La raison d'etre du reseau : sur un `u` non lineaire, `affine + reseau`
-    doit laisser un residu plus petit que l'affine seul -- sinon le reseau
-    n'apprend rien d'utile.
+    """The network's reason to exist: on a nonlinear `u`, `affine + network`
+    must leave a smaller residual than the affine alone -- otherwise the
+    network learns nothing useful.
     """
     u = nonlinear_model
     Sigma_obs = 0.01 * jnp.eye(P)
@@ -169,8 +169,8 @@ def test_residual_denoiser_beats_affine_when_nonlinear(prior, nonlinear_model):
 
 
 def denoiser_residual_standalone(u_samples, features, A, b):
-    """Residu de l'affine standalone -- meme formule que `denoiser_residual`
-    de `approximation_based.py`, sans objet `Denoiser`.
+    """Residual of the standalone affine -- same formula as `denoiser_residual`
+    in `approximation_based.py`, without a `Denoiser` object.
     """
     resid = u_samples - (features @ A.T + b)
     out = resid.T @ resid / resid.shape[0]

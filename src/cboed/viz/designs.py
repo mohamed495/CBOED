@@ -1,8 +1,8 @@
-r"""Designs : positions des capteurs, comparaison des stratégies gloutonnes.
+r"""Designs: sensor positions, comparison of greedy strategies.
 
-Le recouvrement entre deux designs n'est **pas** la bonne métrique : sur un champ
-diffusif, des placements différents portent la même information. Ce qui compte est le
-score, pas la coïncidence des indices.
+The overlap between two designs is **not** the right metric: on a diffusive
+field, different placements can carry the same information. What matters is
+the score, not the coincidence of indices.
 """
 
 import matplotlib.pyplot as plt
@@ -12,15 +12,15 @@ from cboed.viz.style import COLORS
 
 
 def plot_sensor_positions(x, designs, m=None, ax=None, title=""):
-    """Positions retenues par chaque stratégie, une ligne par design.
+    """Positions selected by each strategy, one row per design.
 
     Parameters
     ----------
     designs : dict[str, array]
-        ``{"iEIG>= (19)": indices, "cEIG>= (20)": indices, ...}``. Ordre d'ajout
-        respecté : la couleur code le rang.
+        ``{"iEIG>= (19)": indices, "cEIG>= (20)": indices, ...}``. Insertion
+        order is respected: color encodes rank.
     m : int or None
-        Tronque à ``m`` capteurs.
+        Truncate to ``m`` sensors.
     """
     ax = ax or plt.subplots(figsize=(8, 0.7 * len(designs) + 1.2))[1]
     x = np.asarray(x)
@@ -54,29 +54,29 @@ def plot_sensor_positions(x, designs, m=None, ax=None, title=""):
     ax.set_ylim(-0.5, len(designs) - 0.5)
     ax.grid(axis="x", alpha=0.2)
     if title:
-        ax.set_title(f"{title}   (le numero est l'ordre d'ajout)", fontsize=10)
+        ax.set_title(f"{title}   (the number is the insertion order)", fontsize=10)
     return ax.figure
 
 
 def plot_greedy_comparison(ms, scores, title=""):
-    """Score en fonction de ``m``, une courbe par stratégie gloutonne.
+    """Score as a function of ``m``, one curve per greedy strategy.
 
     Parameters
     ----------
     scores : dict[str, array]
-        ``{"naif": ..., "batch": ..., "schur": ...}`` -- **tous évalués avec le même
-        critère**. Comparer des scores issus de critères différents n'aurait pas de
-        sens.
+        ``{"naive": ..., "batch": ..., "schur": ...}`` -- **all evaluated
+        with the same criterion**. Comparing scores from different criteria
+        would be meaningless.
 
     Notes
     -----
-    Le greedy naïf est l'**oracle** du greedy Schur : ils doivent rendre le même
-    design. Un écart est un bug, pas un résultat.
+    The naive greedy is the **oracle** for the Schur greedy: they must
+    produce the same design. A discrepancy is a bug, not a result.
     """
     fig, ax = plt.subplots(figsize=(6.5, 4))
     for label, s in scores.items():
         ax.plot(ms, s, "o-", ms=3, lw=1.6, label=label)
-    ax.set_xlabel("nombre de capteurs $m$")
+    ax.set_xlabel("number of sensors $m$")
     ax.set_ylabel("score (nats)")
     ax.legend(fontsize=8)
     if title:
@@ -86,20 +86,20 @@ def plot_greedy_comparison(ms, scores, title=""):
 
 
 def plot_greedy_cost(ms, costs, title=""):
-    """Cout de chaque strategie gloutonne en fonction de ``m``, echelle log.
+    """Cost of each greedy strategy as a function of ``m``, log scale.
 
     Parameters
     ----------
     costs : dict[str, array]
-        Cout par strategie -- nombre d'evaluations du critere en boite noire
-        pour ``naif``/``batch``, flops pour ``schur``. Unites heterogenes,
-        d'ou l'echelle log : seul l'ordre de grandeur est comparable.
+        Cost per strategy -- number of black-box criterion evaluations for
+        ``naive``/``batch``, flops for ``schur``. Heterogeneous units, hence
+        the log scale: only the order of magnitude is comparable.
     """
     fig, ax = plt.subplots(figsize=(6.5, 4))
     for label, c in costs.items():
         ax.semilogy(ms, c, "o-", ms=3, lw=1.6, label=label)
-    ax.set_xlabel("nombre de capteurs $m$")
-    ax.set_ylabel("cout (echelle log)")
+    ax.set_xlabel("number of sensors $m$")
+    ax.set_ylabel("cost (log scale)")
     ax.legend(fontsize=8)
     if title:
         ax.set_title(title, fontsize=10)
@@ -108,13 +108,13 @@ def plot_greedy_cost(ms, costs, title=""):
 
 
 def plot_design_on_field(x, field, designs, title=""):
-    """Capteurs superposés au champ -- où l'information est-elle prélevée ?
+    """Sensors overlaid on the field -- where is the information taken from?
 
     Parameters
     ----------
     field : (n,)
-        Un champ de référence : ``std`` du prior, ``|E[u]|``, ou la diagonale de
-        ``Sigma_Y - Sigma_signal`` (là où la non-gaussianité se loge).
+        A reference field: prior ``std``, ``|E[u]|``, or the diagonal of
+        ``Sigma_Y - Sigma_signal`` (where the non-Gaussianity resides).
     """
     fig, ax = plt.subplots(figsize=(8, 3.4))
     x = np.asarray(x)

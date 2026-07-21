@@ -1,4 +1,4 @@
-"""Critères de design : quelle quantité on optimise."""
+"""Design criteria: which quantity is being optimized."""
 
 from functools import partial
 
@@ -18,9 +18,9 @@ class EIG(Criterion):
         \mathrm{EIG} = \tfrac12 \left(
         \log\det \Gamma_{post}^{-1} - \log\det \Gamma_{prior}^{-1}\right)
 
-    Postérieur **moins** prior : observer augmente l'information, donc
-    ``log det Gamma_post^{-1} >= log det Gamma_prior^{-1}``. Une EIG négative
-    trahit l'inversion.
+    Posterior **minus** prior: observing increases information, so
+    ``log det Gamma_post^{-1} >= log det Gamma_prior^{-1}``. A negative EIG
+    signals the terms have been swapped.
     """
 
     @partial(jax.jit, static_argnums=(0,))
@@ -39,10 +39,10 @@ class EIG(Criterion):
 class DOptimal(Criterion):
     r"""``log det Gamma_post^{-1}``.
 
-    Via le log-det Cholesky et non ``eigvalsh`` : ``log det = sum log lambda``
-    mathématiquement, mais le Cholesky ne diagonalise pas -- plus rapide, plus
-    stable. Réserver ``eigvalsh`` aux critères qui touchent les valeurs propres
-    une à une (E-optimal).
+    Via the Cholesky log-det rather than ``eigvalsh``: ``log det = sum log lambda``
+    mathematically, but Cholesky does not diagonalize -- faster and more
+    stable. Reserve ``eigvalsh`` for criteria that touch eigenvalues
+    individually (E-optimal).
     """
 
     @partial(jax.jit, static_argnums=(0,))
@@ -58,14 +58,14 @@ class DOptimal(Criterion):
 class AOptimal(Criterion):
     r"""``-tr Gamma_post``.
 
-    Passe par ``posterior_cov_matmul(I)`` : ``tr Gamma_post = tr(Gamma_post I)``.
-    Un ``cho_solve``, pas d'eigendécomposition -- plus stable et plus rapide que
-    ``-sum(1/eigvals)``, et surtout le critère ne fait plus d'algèbre linéaire
-    pour son compte.
+    Goes through ``posterior_cov_matmul(I)``: ``tr Gamma_post = tr(Gamma_post I)``.
+    A ``cho_solve``, no eigendecomposition -- more stable and faster than
+    ``-sum(1/eigvals)``, and above all the criterion no longer does its own
+    linear algebra.
 
-    En haute dimension, remplacer ``I`` par une matrice de Rademacher ``Z`` et
-    renvoyer ``-mean(sum(Z * cov_matmul(Z)))`` : estimateur de Hutchinson,
-    **sans changer ni le contrat ni ce critère**.
+    In high dimension, replace ``I`` with a Rademacher matrix ``Z`` and
+    return ``-mean(sum(Z * cov_matmul(Z)))``: the Hutchinson estimator,
+    **without changing either the contract or this criterion**.
     """
 
     @partial(jax.jit, static_argnums=(0,))

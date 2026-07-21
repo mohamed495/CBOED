@@ -35,18 +35,18 @@ def _make_setup(lambda_: float) -> Setup:
 
 @pytest.fixture
 def setup_linear() -> Setup:
-    """λ=0 : linéaire-gaussien, l'EIG exacte sert d'oracle."""
+    """λ=0: linear-Gaussian, the exact EIG serves as the oracle."""
     return _make_setup(lambda_=0.0)
 
 
 @pytest.fixture
 def setup_nonlinear() -> Setup:
-    """λ=1 : non-linéaire, pas d'oracle fermé."""
+    """λ=1: nonlinear, no closed-form oracle."""
     return _make_setup(lambda_=1.0)
 
 
 # ─────────────────────────────────────────────────────────
-# Sanity — rapide
+# Sanity -- fast
 # ─────────────────────────────────────────────────────────
 
 
@@ -62,7 +62,7 @@ def test_vnmc_returns_finite_scalar(setup_linear):
 
 
 def test_vnmc_is_deterministic_given_key(setup_linear):
-    """Même clé → même estimation."""
+    """Same key -> same estimate."""
     vnmc = VariationalNMCEIG(
         likelihood=setup_linear.likelihood,
         prior=setup_linear.gaussian_prior,
@@ -74,7 +74,7 @@ def test_vnmc_is_deterministic_given_key(setup_linear):
 
 
 def test_vnmc_with_design(setup_linear):
-    """VNMC fonctionne avec un design restreint."""
+    """VNMC works with a restricted design."""
     vnmc = VariationalNMCEIG(
         likelihood=setup_linear.likelihood,
         prior=setup_linear.gaussian_prior,
@@ -86,29 +86,29 @@ def test_vnmc_with_design(setup_linear):
 
 
 # ─────────────────────────────────────────────────────────
-# Le problème doit être informatif — sinon rien n'est mesurable
+# The problem must be informative -- otherwise nothing is measurable
 # ─────────────────────────────────────────────────────────
 
 
 def test_problem_is_informative(setup_linear):
-    """Garde-fou : l'EIG doit être d'ordre ≥ 1 nat.
+    """Safety net: the EIG must be of order >= 1 nat.
 
-    Avec Sigma_obs = I, l'EIG tombe à ~5e-3 et tous les tests Monte-Carlo
-    tournent dans le bruit numérique.
+    With Sigma_obs = I, the EIG drops to ~5e-3 and all the Monte Carlo tests
+    run in numerical noise.
     """
     eig = EIG(inference=setup_linear.inference).evaluate(setup_linear.prior.mu)
     assert eig > 1.0
 
 
 # ─────────────────────────────────────────────────────────
-# Convergence en LG — lent
+# LG convergence -- slow
 # ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.slow
 def test_vnmc_converges_to_exact_lg(setup_linear):
-    """En LG, la proposition de Laplace est la postérieure exacte :
-    poids d'importance constants, variance nulle, VNMC ≈ EIG."""
+    """In the LG case, the Laplace proposal is the exact posterior:
+    constant importance weights, zero variance, VNMC ≈ EIG."""
     exact = EIG(inference=setup_linear.inference).evaluate(setup_linear.prior.mu)
     vnmc = VariationalNMCEIG(
         likelihood=setup_linear.likelihood,
@@ -120,8 +120,8 @@ def test_vnmc_converges_to_exact_lg(setup_linear):
 
 @pytest.mark.slow
 def test_vnmc_is_upper_bound_lg(setup_linear):
-    """VNMC est une borne supérieure (Jensen sur un estimateur interne
-    non biaisé de p(y)). Tolérance : bruit Monte-Carlo."""
+    """VNMC is an upper bound (Jensen on an internal unbiased estimator
+    of p(y)). Tolerance: Monte Carlo noise."""
     exact = EIG(inference=setup_linear.inference).evaluate(setup_linear.prior.mu)
     vnmc = VariationalNMCEIG(
         likelihood=setup_linear.likelihood,
@@ -132,14 +132,14 @@ def test_vnmc_is_upper_bound_lg(setup_linear):
 
 
 # ─────────────────────────────────────────────────────────
-# Non-linéarité : l'écart Laplace / Monte-Carlo croît avec λ
+# Nonlinearity: the Laplace / Monte Carlo gap grows with λ
 # ─────────────────────────────────────────────────────────
 
 
 @pytest.mark.slow
 def test_laplace_error_grows_with_lambda():
-    """Laplace (approximation linéarisée) s'écarte de la vérité
-    Monte-Carlo quand la non-linéarité augmente."""
+    """Laplace (linearized approximation) diverges from the Monte Carlo
+    ground truth as nonlinearity increases."""
     key = jax.random.key(0)
     gaps = []
     for lam in [0.0, 0.5, 1.0]:
@@ -152,5 +152,5 @@ def test_laplace_error_grows_with_lambda():
         ).estimate(key, n_outer=3000, n_inner=3000)
         gaps.append(float(jnp.abs(eig_laplace - eig_vnmc)))
 
-    assert gaps[0] < 0.2  # λ=0 : Laplace exact, VNMC exact
-    assert gaps[-1] > gaps[0]  # λ=1 : Laplace s'écarte
+    assert gaps[0] < 0.2  # λ=0: Laplace exact, VNMC exact
+    assert gaps[-1] > gaps[0]  # λ=1: Laplace diverges

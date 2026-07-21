@@ -8,10 +8,10 @@ from cboed.estimators.base import EIGEstimator
 
 
 class PriorContrastiveEIG(EIGEstimator):
-    """EIG par Prior Contrastive Estimation (Foster et al. 2020).
+    """EIG via Prior Contrastive Estimation (Foster et al. 2020).
 
-    Borne INFÉRIEURE. Diffère de NMC par l'inclusion de θᵢ (celui qui a
-    généré yᵢ) dans la somme interne. Avec VNMC (borne sup), encadre l'EIG.
+    LOWER bound. Differs from NMC by including θᵢ (the one that generated
+    yᵢ) in the inner sum. Together with VNMC (upper bound), it brackets the EIG.
     """
 
     @property
@@ -39,7 +39,7 @@ class PriorContrastiveEIG(EIGEstimator):
 
         def log_marginal(y, theta_i, ll_i):
             lls = jax.vmap(lambda th: self.likelihood.log_likelihood(y, th, design))(thetas_inner)
-            # ← LA DIFFÉRENCE : inclure θᵢ dans le contraste
+            # <- THE DIFFERENCE: include θᵢ in the contrast
             all_lls = jnp.concatenate([jnp.array([ll_i]), lls])
             return jsp.special.logsumexp(all_lls) - jnp.log(n_inner + 1)
 

@@ -39,12 +39,12 @@ def setup() -> Setup:
 
 
 # ─────────────────────────────────────────────────────────
-# Le wrapper ne casse rien : h = identité → inférence standard
+# The wrapper breaks nothing: h = identity -> standard inference
 # ─────────────────────────────────────────────────────────
 
 
 def test_go_identity_covariance_equals_standard(setup):
-    """h = Id, Σ_θ ≈ 0 → covariance QoI = covariance standard."""
+    """h = Id, Σ_θ ≈ 0 -> QoI covariance = standard covariance."""
     n = setup.model.n
     go = GoalOrientedModel(
         inner=setup.inference,
@@ -58,12 +58,12 @@ def test_go_identity_covariance_equals_standard(setup):
 
 
 def test_go_identity_eig_equals_standard(setup):
-    """h = Id → EIG goal-oriented = EIG standard."""
+    """h = Id -> goal-oriented EIG = standard EIG."""
     n = setup.model.n
     go = GoalOrientedModel(
         inner=setup.inference,
         h=lambda eta: eta,
-        Sigma_theta=1e-10 * jnp.eye(n),  # jitter, évite slogdet singulier
+        Sigma_theta=1e-10 * jnp.eye(n),  # jitter, avoids a singular slogdet
     )
     eig_go = EIG(inference=go).evaluate(setup.prior.mu)
     eig_std = EIG(inference=setup.inference).evaluate(setup.prior.mu)
@@ -71,24 +71,24 @@ def test_go_identity_eig_equals_standard(setup):
 
 
 # ─────────────────────────────────────────────────────────
-# Ta vraie QoI : première moitié du segment
+# The real QoI: first half of the segment
 # ─────────────────────────────────────────────────────────
 
 
 def test_go_half_qoi_dense_oracle(setup):
-    """θ = première moitié : Σ_θ|Y = H Σ_η|Y Hᵀ + Σ_θ, oracle dense."""
+    """θ = first half: Σ_θ|Y = H Σ_η|Y Hᵀ + Σ_θ, dense oracle."""
     n = setup.model.n
     n_qoi = n // 2
     Sigma_theta = 0.01 * jnp.eye(n_qoi)
 
     go = GoalOrientedModel(
         inner=setup.inference,
-        h=lambda eta: eta[:n_qoi],  # première moitié
+        h=lambda eta: eta[:n_qoi],  # first half
         Sigma_theta=Sigma_theta,
     )
     eta = setup.prior.mu
 
-    # oracle dense : H = [I_{n/2} | 0]
+    # dense oracle: H = [I_{n/2} | 0]
     H = jnp.eye(n)[:n_qoi]
     cov_eta = setup.inference._cov(eta)
     expected = H @ cov_eta @ H.T + Sigma_theta
@@ -99,7 +99,7 @@ def test_go_half_qoi_dense_oracle(setup):
 
 
 def test_go_qoi_covariance_is_symmetric_pd(setup):
-    """La covariance QoI reste symétrique définie positive."""
+    """The QoI covariance remains symmetric positive definite."""
     n = setup.model.n
     n_qoi = n // 2
     go = GoalOrientedModel(
@@ -113,7 +113,7 @@ def test_go_qoi_covariance_is_symmetric_pd(setup):
 
 
 def test_go_posterior_less_than_prior_qoi(setup):
-    """Observer réduit l'incertitude sur la QoI aussi : Σ_θ|Y ⪯ Σ_θ."""
+    """Observing also reduces uncertainty on the QoI: Σ_θ|Y ⪯ Σ_θ."""
     n = setup.model.n
     n_qoi = n // 2
     go = GoalOrientedModel(
@@ -127,14 +127,14 @@ def test_go_posterior_less_than_prior_qoi(setup):
 
 
 # ─────────────────────────────────────────────────────────
-# h linéaire → prior QoI indépendant du point (valide eta=None)
+# h linear -> QoI prior independent of the point (validates eta=None)
 # ─────────────────────────────────────────────────────────
 
 
 def test_prior_qoi_independent_of_eta_when_linear(setup):
-    """h linéaire : le prior QoI ne dépend pas du point de linéarisation.
+    """h linear: the QoI prior does not depend on the linearization point.
 
-    C'est ce qui rend le défaut eta=None valide dans log_det_prior_precision.
+    This is what makes the eta=None default valid in log_det_prior_precision.
     """
     n = setup.model.n
     n_qoi = n // 2
@@ -145,4 +145,4 @@ def test_prior_qoi_independent_of_eta_when_linear(setup):
     )
     c1 = go.prior_covariance_qoi(jnp.zeros(n))
     c2 = go.prior_covariance_qoi(jnp.ones(n) * 5.0)
-    assert jnp.allclose(c1, c2)  # constant ⟺ h linéaire
+    assert jnp.allclose(c1, c2)  # constant iff h linear

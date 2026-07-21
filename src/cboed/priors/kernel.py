@@ -1,9 +1,9 @@
 # src/cboed/priors/kernel.py
-"""Noyaux de covariance stationnaires pour les priors gaussiens.
+"""Stationary covariance kernels for Gaussian priors.
 
-Tous les noyaux héritent de :class:`KernelBase`, qui porte ``length_scale``,
-``sigma``, leur validation et ``_pairwise_distance``. Un noyau sans
-hyperparamètre supplémentaire se réduit à son ``__call__``.
+All kernels inherit from :class:`KernelBase`, which carries ``length_scale``,
+``sigma``, their validation, and ``_pairwise_distance``. A kernel with no
+extra hyperparameter reduces to its ``__call__``.
 """
 
 import jax.numpy as jnp
@@ -14,22 +14,22 @@ from cboed.priors.base import KernelBase
 
 
 class Gaussian(KernelBase):
-    r"""Noyau gaussien (RBF, exponentielle quadratique).
+    r"""Gaussian kernel (RBF, squared exponential).
 
     .. math::
         k(x, x') = \sigma^2 \exp\left(-\frac{|x - x'|^2}{2\ell^2}\right)
 
-    Infiniment différentiable. Décroissance spectrale super-exponentielle : la
-    Gram devient numériquement de rang déficient sur grille fine, ce qui en
-    fait un noyau de cas-jouet plutôt qu'un prior réaliste en haute dimension
-    (préférer les Matérn).
+    Infinitely differentiable. Super-exponential spectral decay: the Gram
+    matrix becomes numerically rank-deficient on a fine grid, which makes it
+    a toy-case kernel rather than a realistic prior in high dimension
+    (prefer the Matern kernels).
 
     Parameters
     ----------
     length_scale : float
-        Longueur de corrélation :math:`\ell`.
+        Correlation length :math:`\ell`.
     sigma : float
-        Écart-type du signal :math:`\sigma`.
+        Signal standard deviation :math:`\sigma`.
 
     Examples
     --------
@@ -43,20 +43,20 @@ class Gaussian(KernelBase):
 
 
 class Matern12(KernelBase):
-    r"""Noyau de Matérn :math:`\nu = 1/2` (exponentiel, Ornstein-Uhlenbeck).
+    r"""Matern kernel :math:`\nu = 1/2` (exponential, Ornstein-Uhlenbeck).
 
     .. math::
         k(x, x') = \sigma^2 \exp\left(-\frac{|x - x'|}{\ell}\right)
 
-    Continu mais nulle part différentiable en moyenne quadratique : les
-    trajectoires sont les plus rugueuses de la famille.
+    Continuous but nowhere differentiable in mean square: the sample paths
+    are the roughest in the family.
 
     Parameters
     ----------
     length_scale : float
-        Longueur de corrélation :math:`\ell`.
+        Correlation length :math:`\ell`.
     sigma : float
-        Écart-type du signal :math:`\sigma`.
+        Signal standard deviation :math:`\sigma`.
 
     Examples
     --------
@@ -70,21 +70,21 @@ class Matern12(KernelBase):
 
 
 class Matern32(KernelBase):
-    r"""Noyau de Matérn :math:`\nu = 3/2`.
+    r"""Matern kernel :math:`\nu = 3/2`.
 
     .. math::
         k(x, x') = \sigma^2 \left(1 + \frac{\sqrt{3}\,r}{\ell}\right)
                    \exp\left(-\frac{\sqrt{3}\,r}{\ell}\right),
         \qquad r = |x - x'|
 
-    Une fois différentiable en moyenne quadratique.
+    Once differentiable in mean square.
 
     Parameters
     ----------
     length_scale : float
-        Longueur de corrélation :math:`\ell`.
+        Correlation length :math:`\ell`.
     sigma : float
-        Écart-type du signal :math:`\sigma`.
+        Signal standard deviation :math:`\sigma`.
 
     Examples
     --------
@@ -99,7 +99,7 @@ class Matern32(KernelBase):
 
 
 class Matern52(KernelBase):
-    r"""Noyau de Matérn :math:`\nu = 5/2`.
+    r"""Matern kernel :math:`\nu = 5/2`.
 
     .. math::
         k(x, x') = \sigma^2 \left(1 + \frac{\sqrt{5}\,r}{\ell}
@@ -107,14 +107,14 @@ class Matern52(KernelBase):
                    \exp\left(-\frac{\sqrt{5}\,r}{\ell}\right),
         \qquad r = |x - x'|
 
-    Deux fois différentiable en moyenne quadratique.
+    Twice differentiable in mean square.
 
     Parameters
     ----------
     length_scale : float
-        Longueur de corrélation :math:`\ell`.
+        Correlation length :math:`\ell`.
     sigma : float
-        Écart-type du signal :math:`\sigma`.
+        Signal standard deviation :math:`\sigma`.
 
     Examples
     --------
@@ -129,23 +129,23 @@ class Matern52(KernelBase):
 
 
 class RationalQuadratic(KernelBase):
-    r"""Noyau rationnel quadratique — mélange continu de noyaux RBF.
+    r"""Rational quadratic kernel -- continuous mixture of RBF kernels.
 
     .. math::
         k(x, x') = \sigma^2 \left(1 + \frac{|x - x'|^2}
                    {2\alpha\ell^2}\right)^{-\alpha}
 
-    Mélange d'échelles de corrélation. Tend vers :class:`Gaussian` quand
+    Mixture of correlation scales. Tends to :class:`Gaussian` as
     :math:`\alpha \to \infty`.
 
     Parameters
     ----------
     length_scale : float
-        Longueur de corrélation :math:`\ell`.
+        Correlation length :math:`\ell`.
     sigma : float
-        Écart-type du signal :math:`\sigma`.
+        Signal standard deviation :math:`\sigma`.
     alpha : float
-        Paramètre de mélange :math:`\alpha`. Doit être strictement positif.
+        Mixing parameter :math:`\alpha`. Must be strictly positive.
 
     Examples
     --------
@@ -171,23 +171,23 @@ class RationalQuadratic(KernelBase):
 
 
 class Periodic(KernelBase):
-    r"""Noyau périodique (exp-sine-squared).
+    r"""Periodic kernel (exp-sine-squared).
 
     .. math::
         k(x, x') = \sigma^2 \exp\left(-\frac{2}{\ell^2}
                    \sin^2\left(\frac{\pi |x - x'|}{p}\right)\right)
 
-    Non stationnaire au sens de la distance euclidienne seule : la corrélation
-    dépend de la distance *modulo* la période :math:`p`.
+    Not stationary in the sense of Euclidean distance alone: the correlation
+    depends on the distance *modulo* the period :math:`p`.
 
     Parameters
     ----------
     length_scale : float
-        Longueur de corrélation :math:`\ell`.
+        Correlation length :math:`\ell`.
     sigma : float
-        Écart-type du signal :math:`\sigma`.
+        Signal standard deviation :math:`\sigma`.
     period : float
-        Période :math:`p`. Doit être strictement positive.
+        Period :math:`p`. Must be strictly positive.
 
     Examples
     --------
