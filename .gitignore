@@ -36,4 +36,5 @@ CBOED_recap_session.md
 .cache
 PyBOED_Architecture_2.md
 *.npz
-.cache*
+.cache
+.cache_protocol

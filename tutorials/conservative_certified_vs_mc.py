@@ -79,7 +79,7 @@ def eig_full_convergence(prior, lambda_: float, n_outer: int, n_inners: list[int
     estimates = {}
     for n_inner in n_inners:
         k = jr.fold_in(key, n_inner)
-        estimates[n_inner] = float(nmc.estimate(k, design=None, n_outer=n_outer, n_inner=n_inner))
+        estimates[n_inner] = float(nmc.estimate(k, design=None, n_outer=n_outer, n_inner=n_inner, chunk_size=25))
     return estimates
 
 
