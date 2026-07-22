@@ -29,8 +29,8 @@ Usage
 import argparse
 from pathlib import Path
 
-import jax.numpy as jnp
-import jax.random as jr
+import jax.numpy as jnp # type: ignore
+import jax.random as jr # type: ignore
 import matplotlib.pyplot as plt
 import numpy as np
 

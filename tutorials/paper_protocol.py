@@ -41,9 +41,9 @@ Usage
 import argparse
 from pathlib import Path
 
-import jax
-import jax.numpy as jnp
-import jax.random as jr
+import jax # type: ignore
+import jax.numpy as jnp # type: ignore
+import jax.random as jr # type: ignore
 import numpy as np
 
 from cboed.benchmarks import (
