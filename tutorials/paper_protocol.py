@@ -411,11 +411,17 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
 # =============================================================================
 
 
-def fig_spectrum(all_once, out: Path):
+def fig_spectrum(all_once, budgets, out: Path):
+    """``budgets``: the same sensor budgets used everywhere else in the protocol
+    (``args.budgets``, cf. ``fig_boxplots``/``strategies_for_method``) -- the
+    sub-optimality constants (22)/(23) are evaluated at these ``m``, not some
+    unrelated dense range, so this figure is directly comparable to the bounds
+    figures at the same budgets.
+    """
+    ms = np.asarray(budgets)
     for case in CASES:
         alpha_by_lambda, beta_by_lambda = {}, {}
         inc_by_lambda, cons_by_lambda = {}, {}
-        ms_dense = None
         for lambda_ in LAMBDAS_PROTOCOL:
             if lambda_ == 0.0:
                 continue
@@ -434,14 +440,13 @@ def fig_spectrum(all_once, out: Path):
 
             # Eq. (22)/(23): two distinct partial sums over the SAME spectral
             # terms -- first m (incremental) vs first d-m (conservative), not
-            # the raw per-mode ln(alpha_i)+ln(beta_i) plotted above.
-            if ms_dense is None:
-                ms_dense = np.arange(1, q.alpha.shape[0])
+            # the raw per-mode ln(alpha_i)+ln(beta_i) plotted above. Evaluated
+            # at the same budgets ``m`` as the bounds figures.
             inc_by_lambda[lambda_] = np.array(
-                [q.suboptimality(int(m), "incremental") for m in ms_dense]
+                [q.suboptimality(int(m), "incremental") for m in ms]
             )
             cons_by_lambda[lambda_] = np.array(
-                [q.suboptimality(int(m), "conservative") for m in ms_dense]
+                [q.suboptimality(int(m), "conservative") for m in ms]
             )
 
         if not alpha_by_lambda:
@@ -452,7 +457,7 @@ def fig_spectrum(all_once, out: Path):
         )
         save(
             vs.plot_suboptimality_vs_lambda(
-                ms_dense, inc_by_lambda, cons_by_lambda, title=f"gradient, {case}"
+                ms, inc_by_lambda, cons_by_lambda, title=f"gradient, {case}"
             ),
             out / f"02b_suboptimality_vs_lambda_{case}.png",
         )
@@ -546,7 +551,7 @@ def main():
                 fig_reconstruction_standard(once, out)
             if lambda_ == 0.0 and case == "go":
                 fig_reconstruction_go(once, out)
-            fig_spectrum(all_once, out)
+            fig_spectrum(all_once, args.budgets, out)
             fig_boxplots({(lambda_, case): per_method}, args.budgets, out)
 
     print(f"\n-> {out.resolve()}")

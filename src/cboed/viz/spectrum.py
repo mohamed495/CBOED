@@ -225,15 +225,21 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     fig, ax = plt.subplots(figsize=(7.5, 4.6))
     for lam in lams:
         color = colors[lam]
-        ax.plot(ms, inc_by_lambda[lam], lw=1.8, ls="-", color=color)
-        ax.plot(ms, cons_by_lambda[lam], lw=1.8, ls="--", color=color)
+        ax.plot(ms, inc_by_lambda[lam], "o-", ms=4, lw=1.8, color=color)
+        ax.plot(ms, cons_by_lambda[lam], "s--", ms=4, lw=1.8, color=color)
 
     lambda_handles = [
         Line2D([0], [0], color=colors[lam], lw=1.8, label=rf"$\lambda={lam}$") for lam in lams
     ]
     style_handles = [
-        Line2D([0], [0], color="0.3", lw=1.8, ls="-", label=r"incremental $\sum_{i=1}^{m}$ (22)"),
-        Line2D([0], [0], color="0.3", lw=1.8, ls="--", label=r"conservative $\sum_{i=1}^{d-m}$ (23)"),
+        Line2D(
+            [0], [0], color="0.3", lw=1.8, ls="-", marker="o", ms=4,
+            label=r"incremental $\sum_{i=1}^{m}$ (22)",
+        ),
+        Line2D(
+            [0], [0], color="0.3", lw=1.8, ls="--", marker="s", ms=4,
+            label=r"conservative $\sum_{i=1}^{d-m}$ (23)",
+        ),
     ]
     legend_lambda = ax.legend(handles=lambda_handles, fontsize=7, loc="center left", title=r"$\lambda$")
     ax.add_artist(legend_lambda)
