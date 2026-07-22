@@ -414,6 +414,8 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
 def fig_spectrum(all_once, out: Path):
     for case in CASES:
         alpha_by_lambda, beta_by_lambda = {}, {}
+        inc_by_lambda, cons_by_lambda = {}, {}
+        ms_dense = None
         for lambda_ in LAMBDAS_PROTOCOL:
             if lambda_ == 0.0:
                 continue
@@ -430,11 +432,29 @@ def fig_spectrum(all_once, out: Path):
             alpha_by_lambda[lambda_] = np.asarray(q.alpha)
             beta_by_lambda[lambda_] = np.asarray(q.beta)
 
+            # Eq. (22)/(23): two distinct partial sums over the SAME spectral
+            # terms -- first m (incremental) vs first d-m (conservative), not
+            # the raw per-mode ln(alpha_i)+ln(beta_i) plotted above.
+            if ms_dense is None:
+                ms_dense = np.arange(1, q.alpha.shape[0])
+            inc_by_lambda[lambda_] = np.array(
+                [q.suboptimality(int(m), "incremental") for m in ms_dense]
+            )
+            cons_by_lambda[lambda_] = np.array(
+                [q.suboptimality(int(m), "conservative") for m in ms_dense]
+            )
+
         if not alpha_by_lambda:
             continue
         save(
             vs.plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=f"gradient, {case}"),
             out / f"02_spectrum_vs_lambda_{case}.png",
+        )
+        save(
+            vs.plot_suboptimality_vs_lambda(
+                ms_dense, inc_by_lambda, cons_by_lambda, title=f"gradient, {case}"
+            ),
+            out / f"02b_suboptimality_vs_lambda_{case}.png",
         )
 
 
@@ -528,7 +548,7 @@ def main():
                 fig_reconstruction_go(once, out)
             fig_spectrum(all_once, out)
             fig_boxplots({(lambda_, case): per_method}, args.budgets, out)
-        break 
+
     print(f"\n-> {out.resolve()}")
 
 

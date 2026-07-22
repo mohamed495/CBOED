@@ -197,6 +197,48 @@ def plot_log_generalized_spectrum(alpha, beta, title=""):
     return fig
 
 
+def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
+    r"""Sub-optimality constants (Prop. 1, eq. (22)/(23)) vs budget -- one
+    curve per ``lambda``, not the raw per-mode spectrum.
+
+    (22) and (23) read the *same* spectral terms
+    ``t_i = (log(alpha_i) + log(beta_i)) / 2`` two different ways -- a
+    **partial sum** over the first ``m`` terms (incremental) or the first
+    ``d - m`` terms (conservative). These are two different curves in ``m``,
+    not one: the incremental constant **grows** with ``m``, the conservative
+    one **shrinks** -- :func:`plot_alpha_spectrum`/``plot_spectrum_vs_lambda``
+    only show the un-summed ``t_i`` and do not make this distinction visible.
+
+    Parameters
+    ----------
+    ms : (M,)
+        Budgets (can be a dense range, not just the sensor budgets actually
+        used -- the sum is cheap to evaluate at any ``m``).
+    inc_by_lambda, cons_by_lambda : dict[float, array]
+        ``{lambda: [suboptimality(m, strategy) for m in ms]}``.
+    """
+    lams = sorted(inc_by_lambda)
+    cmap = plt.get_cmap("viridis")
+    colors = {lam: cmap(i / max(len(lams) - 1, 1)) for i, lam in enumerate(lams)}
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
+    for lam in lams:
+        label = rf"$\lambda={lam}$"
+        axes[0].plot(ms, inc_by_lambda[lam], lw=1.8, ls="-", color=colors[lam], label=label)
+        axes[1].plot(ms, cons_by_lambda[lam], lw=1.8, ls="--", color=colors[lam], label=label)
+
+    axes[0].set_title(r"incremental: $\sum_{i=1}^{m}$ (22)", fontsize=10)
+    axes[1].set_title(r"conservative: $\sum_{i=1}^{d-m}$ (23)", fontsize=10)
+    axes[0].set_ylabel("sub-optimality constant (nats)")
+    for ax in axes:
+        ax.set_xlabel("number of sensors $m$")
+        ax.legend(fontsize=7)
+    if title:
+        fig.suptitle(title, fontsize=11)
+    fig.tight_layout()
+    return fig
+
+
 def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
     r"""``log(alpha_i)``, ``log(beta_i)`` and their sum -- one curve per ``lambda``.
 

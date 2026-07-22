@@ -22,8 +22,12 @@ def _mark_sensors_rug(ax, x, sensors, height_frac=0.045):
     tick_h = height_frac * (ymax - ymin)
     for j in np.asarray(sensors):
         ax.plot(
-            [x[j], x[j]], [ymin, ymin + tick_h],
-            color=COLORS["sensors"], lw=2.2, solid_capstyle="butt", zorder=4,
+            [x[j], x[j]],
+            [ymin, ymin + tick_h],
+            color=COLORS["sensors"],
+            lw=2.2,
+            solid_capstyle="butt",
+            zorder=4,
         )
     ax.set_ylim(ymin, ymax)
 
@@ -169,8 +173,16 @@ def plot_contraction(x, prior_std, posterior_std, sensors=None):
         # as "how much this sensor actually helped" -- no extra visual layer.
         j = np.asarray(sensors)
         ax.plot(
-            x[j], ratio[j], marker="o", ls="none",
-            color=COLORS["sensors"], ms=8, mec="white", mew=1.0, zorder=5, label="sensors",
+            x[j],
+            ratio[j],
+            marker="o",
+            ls="none",
+            color=COLORS["sensors"],
+            ms=8,
+            mec="white",
+            mew=1.0,
+            zorder=5,
+            label="sensors",
         )
         ax.legend(fontsize=7, loc="lower right")
     ax.set_xlabel("$x$")
