@@ -14,6 +14,7 @@ different ways:
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 
 from cboed.viz.style import COLORS
 
@@ -199,15 +200,15 @@ def plot_log_generalized_spectrum(alpha, beta, title=""):
 
 def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     r"""Sub-optimality constants (Prop. 1, eq. (22)/(23)) vs budget -- one
-    curve per ``lambda``, not the raw per-mode spectrum.
+    pair of curves per ``lambda``, both on a single panel so the incremental
+    (rising) / conservative (falling) trade-off is visible directly.
 
     (22) and (23) read the *same* spectral terms
     ``t_i = (log(alpha_i) + log(beta_i)) / 2`` two different ways -- a
-    **partial sum** over the first ``m`` terms (incremental) or the first
-    ``d - m`` terms (conservative). These are two different curves in ``m``,
-    not one: the incremental constant **grows** with ``m``, the conservative
-    one **shrinks** -- :func:`plot_alpha_spectrum`/``plot_spectrum_vs_lambda``
-    only show the un-summed ``t_i`` and do not make this distinction visible.
+    **partial sum** over the first ``m`` terms (incremental, solid) or the
+    first ``d - m`` terms (conservative, dashed). One color per ``lambda``,
+    consistent with :func:`plot_spectrum_vs_lambda`; line style carries the
+    strategy, matching the convention used in ``viz.bounds``.
 
     Parameters
     ----------
@@ -221,20 +222,27 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     cmap = plt.get_cmap("viridis")
     colors = {lam: cmap(i / max(len(lams) - 1, 1)) for i, lam in enumerate(lams)}
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
+    fig, ax = plt.subplots(figsize=(7.5, 4.6))
     for lam in lams:
-        label = rf"$\lambda={lam}$"
-        axes[0].plot(ms, inc_by_lambda[lam], lw=1.8, ls="-", color=colors[lam], label=label)
-        axes[1].plot(ms, cons_by_lambda[lam], lw=1.8, ls="--", color=colors[lam], label=label)
+        color = colors[lam]
+        ax.plot(ms, inc_by_lambda[lam], lw=1.8, ls="-", color=color)
+        ax.plot(ms, cons_by_lambda[lam], lw=1.8, ls="--", color=color)
 
-    axes[0].set_title(r"incremental: $\sum_{i=1}^{m}$ (22)", fontsize=10)
-    axes[1].set_title(r"conservative: $\sum_{i=1}^{d-m}$ (23)", fontsize=10)
-    axes[0].set_ylabel("sub-optimality constant (nats)")
-    for ax in axes:
-        ax.set_xlabel("number of sensors $m$")
-        ax.legend(fontsize=7)
+    lambda_handles = [
+        Line2D([0], [0], color=colors[lam], lw=1.8, label=rf"$\lambda={lam}$") for lam in lams
+    ]
+    style_handles = [
+        Line2D([0], [0], color="0.3", lw=1.8, ls="-", label=r"incremental $\sum_{i=1}^{m}$ (22)"),
+        Line2D([0], [0], color="0.3", lw=1.8, ls="--", label=r"conservative $\sum_{i=1}^{d-m}$ (23)"),
+    ]
+    legend_lambda = ax.legend(handles=lambda_handles, fontsize=7, loc="center left", title=r"$\lambda$")
+    ax.add_artist(legend_lambda)
+    ax.legend(handles=style_handles, fontsize=7, loc="upper center")
+
+    ax.set_xlabel("number of sensors $m$")
+    ax.set_ylabel("sub-optimality constant (nats)")
     if title:
-        fig.suptitle(title, fontsize=11)
+        ax.set_title(title, fontsize=10)
     fig.tight_layout()
     return fig
 
