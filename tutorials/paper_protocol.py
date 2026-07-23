@@ -39,6 +39,7 @@ Usage
 """
 
 import argparse
+import logging
 from pathlib import Path
 
 import jax # type: ignore
@@ -75,6 +76,8 @@ from cboed.viz import bounds as vb
 from cboed.viz import fields as vf
 from cboed.viz import spectrum as vs
 from cboed.viz.style import save, use_style
+
+logger = logging.getLogger(__name__)
 
 LAMBDAS_PROTOCOL = (0.0, 0.05, 0.2, 0.75, 1.0)
 CASES = ("standard", "go")
@@ -151,7 +154,7 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
         Sigma_noise_a = approximation_noise(d_g, u_vals, Y, theta_for_noise, SIGMA_OBS_MATRIX)
         methods["affine"] = (Sigma_signal_a, Sigma_noise_a)
     except ValueError as e:
-        print(f"    [affine] failed lambda={lambda_} case={case}: {e}")
+        logger.warning("[affine] failed lambda=%s case=%s: %s", lambda_, case, e)
         methods["affine"] = None
 
     try:
@@ -161,7 +164,7 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
         Sigma_noise_nn = approximation_noise(d_g_nn, u_vals, Y, theta_for_noise, SIGMA_OBS_MATRIX)
         methods["affine_nn"] = (Sigma_signal_nn, Sigma_noise_nn)
     except ValueError as e:
-        print(f"    [affine+NN] failed lambda={lambda_} case={case}: {e}")
+        logger.warning("[affine+NN] failed lambda=%s case=%s: %s", lambda_, case, e)
         methods["affine_nn"] = None
 
     return Sigma_Y, Sigma_Y_given_theta, methods
@@ -264,7 +267,7 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
     for r in range(n_repeats):
         key = jr.fold_in(jr.key(base_seed), r)
         k_diag, k_eig = jr.split(key)
-        print(f"    repeat {r + 1}/{n_repeats} ...", flush=True)
+        logger.info("repeat %d/%d ...", r + 1, n_repeats)
         Sigma_Y, Sigma_Y_given_theta, methods_diag = compute_repeat(
             lambda_, case, k_diag, n_samples, n_gradient, net_steps
         )
@@ -308,12 +311,12 @@ def cache_path(cache_dir, lambda_, case, eig_full_mode):
 def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
     path = cache_path(cache_dir, lambda_, case, kwargs.get("eig_full_mode", "certified"))
     if path.exists() and not force:
-        print(f"  cache  {path.name}")
+        logger.info("cache  %s", path.name)
         data = dict(np.load(path, allow_pickle=True))
         once = (data["once_Sigma_Y"], data["once_Sigma_Y_given_theta"], data["once_methods"].item())
         per_method = data["per_method"].item()
         return once, per_method
-    print(f"  computing lambda={lambda_} case={case} ...", flush=True)
+    logger.info("computing lambda=%s case=%s ...", lambda_, case)
     once, per_method = compute_lambda_case(lambda_, case, **kwargs)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -519,15 +522,28 @@ def main():
     p.add_argument("--out", default="figures_protocol")
     p.add_argument("--cache", default=".cache_protocol")
     p.add_argument("--force", action="store_true")
+    p.add_argument(
+        "--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+        help="Logging verbosity. INFO (default) shows per-repeat/per-figure progress;"
+             " DEBUG adds noisier third-party (JAX/matplotlib) messages too.",
+    )
     args = p.parse_args()
 
     use_style()
     out, cache_dir = Path(args.out), Path(args.cache)
+    out.mkdir(parents=True, exist_ok=True)
+
+    logging.basicConfig(
+        level=args.log_level,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+        handlers=[logging.StreamHandler(), logging.FileHandler(out / "run.log")],
+    )
 
     all_once: dict = {}
     per_method_all: dict = {}
 
-    print("Compute + figures (per lambda x case, as they complete)")
+    logger.info("Compute + figures (per lambda x case, as they complete)")
     for lambda_ in args.lambdas:
         for case in args.cases:
             once, per_method = load_or_compute(
@@ -546,7 +562,7 @@ def main():
             # everything available so far (one curve per lambda>0 already
             # computed): it fills in over the course of the sweep rather
             # than appearing all at once at the end.
-            print(f"  figures lambda={lambda_} case={case} ...", flush=True)
+            logger.info("figures lambda=%s case=%s ...", lambda_, case)
             if lambda_ == 0.0 and case == "standard":
                 fig_reconstruction_standard(once, out)
             if lambda_ == 0.0 and case == "go":
@@ -554,7 +570,7 @@ def main():
             fig_spectrum(all_once, args.budgets, out)
             fig_boxplots({(lambda_, case): per_method}, args.budgets, out)
 
-    print(f"\n-> {out.resolve()}")
+    logger.info("-> %s", out.resolve())
 
 
 if __name__ == "__main__":

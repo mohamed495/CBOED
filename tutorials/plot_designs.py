@@ -137,7 +137,7 @@ def main():
     ax.set_yticks([])
     fig1.tight_layout()
     path1 = save(fig1, output_dir / "01_designs_comparison.png")
-    print(f"  → {path1.name}")
+    print(f"  -> {path1.name}")
 
     # Figure 2: Designs as a function of m (greedy)
     fig2, ax = plt.subplots(figsize=(10, 4))
@@ -157,7 +157,7 @@ def main():
     ax.grid(True, alpha=0.2, axis="x")
     fig2.tight_layout()
     path2 = save(fig2, output_dir / "02_greedy_progression.png")
-    print(f"  → {path2.name}")
+    print(f"  -> {path2.name}")
 
     # -----------------------------------------------------------------------
     # 4. Summary

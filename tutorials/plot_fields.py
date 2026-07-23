@@ -96,7 +96,7 @@ def main():
     fig1.suptitle(rf"Initial conditions vs observations | $\lambda = {lambda_:.2f}$", fontsize=11)
     fig1.tight_layout()
     path1 = save(fig1, output_dir / "01_theta_vs_observations.png")
-    print(f"  → {path1.name}")
+    print(f"  -> {path1.name}")
 
     # Figure 2: Distribution of the observations for each θ
     fig2, axes = plt.subplots(1, n_samples, figsize=(12, 3.5))
@@ -113,7 +113,7 @@ def main():
     fig2.suptitle(rf"Observation histograms | $\lambda = {lambda_:.2f}$", fontsize=11)
     fig2.tight_layout()
     path2 = save(fig2, output_dir / "02_observations_distribution.png")
-    print(f"  → {path2.name}")
+    print(f"  -> {path2.name}")
 
     # Figure 3: Comparison θ vs observations (scatter)
     fig3, axes = plt.subplots(1, n_samples, figsize=(12, 3.5))
@@ -131,7 +131,7 @@ def main():
     fig3.suptitle(rf"Linear mapping: θ → obs | $\lambda = {lambda_:.2f}$", fontsize=11)
     fig3.tight_layout()
     path3 = save(fig3, output_dir / "03_mapping_theta_to_obs.png")
-    print(f"  → {path3.name}")
+    print(f"  -> {path3.name}")
 
     # Figure 4: All θ and observations on the same figure
     fig4, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
@@ -156,7 +156,7 @@ def main():
     fig4.suptitle(rf"All θ and observations | $\lambda = {lambda_:.2f}$", fontsize=11)
     fig4.tight_layout()
     path4 = save(fig4, output_dir / "04_all_samples.png")
-    print(f"  → {path4.name}")
+    print(f"  -> {path4.name}")
 
     # -----------------------------------------------------------------------
     # 5. Summary

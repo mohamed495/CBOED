@@ -38,3 +38,4 @@ PyBOED_Architecture_2.md
 *.npz
 .cache
 .cache_protocol
+*.log

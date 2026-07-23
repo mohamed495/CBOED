@@ -72,7 +72,7 @@ def test_residual_below_Sigma_obs(prior, linear_model):
 
 
 def test_signal_matches_gradient_at_lambda_zero(prior, linear_model):
-    """⭐ §3.2 == §3.3 in the linear case. Two paths, same matrix.
+    """§3.2 == §3.3 in the linear case. Two paths, same matrix.
 
     At `lambda = 0`, `E[u|Y]` is affine (linear model, everything Gaussian), so the
     affine denoiser is exact and `Sigma^{(F)}_signal` equals the gradient `Sigma_signal`.

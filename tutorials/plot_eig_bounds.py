@@ -119,7 +119,7 @@ def main():
     ax.grid(True, alpha=0.3)
     fig1.tight_layout()
     path1 = save(fig1, output_dir / "01_eig_exact.png")
-    print(f"  → {path1.name}")
+    print(f"  -> {path1.name}")
 
     # Figure 2: incremental gain
     eig_incremental = jnp.diff(eig_greedy, prepend=0)
@@ -131,7 +131,7 @@ def main():
     ax.grid(True, alpha=0.3, axis="y")
     fig2.tight_layout()
     path2 = save(fig2, output_dir / "02_eig_incremental.png")
-    print(f"  → {path2.name}")
+    print(f"  -> {path2.name}")
 
     # -----------------------------------------------------------------------
     # 5. Summary

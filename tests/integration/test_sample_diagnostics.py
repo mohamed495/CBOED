@@ -90,7 +90,7 @@ def test_law_of_total_variance(bench):
 
 
 def test_zero_Sigma_xi_degenerates_to_Sigma_obs(bench):
-    """⭐ `Sigma_xi = 0` exactly: Rem. 3.1 is **regular** there.
+    """`Sigma_xi = 0` exactly: Rem. 3.1 is **regular** there.
 
     Where Prop. 4 has a singular limit (`J(h) = Sigma_xi^{-1}` blows up), the
     sampling path accepts `Sigma_xi = 0`: `eta|theta` degenerates to a Dirac,

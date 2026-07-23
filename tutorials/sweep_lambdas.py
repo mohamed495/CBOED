@@ -102,7 +102,7 @@ def process_lambda(lambda_, n_samples=1000):
     __import__("matplotlib.pyplot", fromlist=["colorbar"]).colorbar(im1, ax=ax, label="covariance")
     fig1.tight_layout()
     path1 = save(fig1, output_dir / "01_Sigma_theta.png")
-    print(f"  → {path1.name}")
+    print(f"  -> {path1.name}")
 
     # Figure 2: Σ_Y and Σ_signal (numerator)
     fig2 = plot_matrix_comparison(
@@ -111,7 +111,7 @@ def process_lambda(lambda_, n_samples=1000):
         title=f"Numerator: $\\Sigma_Y$ vs $\\Sigma_{{\\mathrm{{signal}}}}$ | $\\lambda = {lambda_:.2f}$",
     )
     path2 = save(fig2, output_dir / "02_numerator.png")
-    print(f"  → {path2.name}")
+    print(f"  -> {path2.name}")
 
     # Figure 3: Σ_Y|θ and Σ_noise (denominator)
     fig3 = plot_matrix_comparison(
@@ -120,7 +120,7 @@ def process_lambda(lambda_, n_samples=1000):
         title=f"Denominator: $\\Sigma_{{Y|\\theta}}$ vs $\\Sigma_{{\\mathrm{{noise}}}}$ | $\\lambda = {lambda_:.2f}$",
     )
     path3 = save(fig3, output_dir / "03_denominator.png")
-    print(f"  → {path3.name}")
+    print(f"  -> {path3.name}")
 
     # Figure 4: Spectra
     fig4, ax = __import__("matplotlib.pyplot", fromlist=["subplots"]).subplots(figsize=(8, 5))
@@ -168,7 +168,7 @@ def process_lambda(lambda_, n_samples=1000):
     ax.set_title(f"Spectra (estimated) | $\\lambda = {lambda_:.2f}$")
     fig4.tight_layout()
     path4 = save(fig4, output_dir / "04_spectra.png")
-    print(f"  → {path4.name}")
+    print(f"  -> {path4.name}")
 
     # Figure 5: Jacobian
     J = model.jacobian(prior.mu, None)
@@ -180,7 +180,7 @@ def process_lambda(lambda_, n_samples=1000):
     __import__("matplotlib.pyplot", fromlist=["colorbar"]).colorbar(im5, ax=ax)
     fig5.tight_layout()
     path5 = save(fig5, output_dir / "05_jacobian.png")
-    print(f"  → {path5.name}")
+    print(f"  -> {path5.name}")
 
 
 def main():
@@ -193,7 +193,7 @@ def main():
         process_lambda(lambda_)
 
     print(f"\n{'=' * 70}")
-    print("✓ All sweeps completed")
+    print("All sweeps completed")
     print("=" * 70)
 
 

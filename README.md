@@ -29,16 +29,16 @@ Early development — `0.x` means the API is unstable and may change.
 
 |Module|Status|
 |---|---|
-|`core/` — abstract interfaces, forward models (advection-diffusion, Burgers)|✅ implemented|
-|`priors/` — Gaussian process priors, kernels|✅ implemented|
-|`likelihood/` — Gaussian likelihood|✅ implemented|
-|`inference/` — linear posterior, goal-oriented (QoI) posterior|✅ implemented|
-|`criteria/` — EIG, D-optimal, A-optimal|✅ implemented|
-|`bounds/` — certified EIG bounds (incremental, conservative), quasi-optimality spectrum|✅ implemented — original contribution|
-|`optim/` — greedy design selection (Schur-complement based)|✅ implemented|
-|`estimators/` — Laplace, nested Monte Carlo (standard + goal-oriented), VNMC, PCE|✅ implemented|
-|`viz/` — reconstruction, spectrum, bounds, design plots|✅ implemented|
-|`surrogates/` — neural forward surrogates|📋 planned (optional deps only, no code yet)|
+|`core/` — abstract interfaces, forward models (advection-diffusion, Burgers)|implemented|
+|`priors/` — Gaussian process priors, kernels|implemented|
+|`likelihood/` — Gaussian likelihood|implemented|
+|`inference/` — linear posterior, goal-oriented (QoI) posterior|implemented|
+|`criteria/` — EIG, D-optimal, A-optimal|implemented|
+|`bounds/` — certified EIG bounds (incremental, conservative), quasi-optimality spectrum|implemented — original contribution|
+|`optim/` — greedy design selection (Schur-complement based)|implemented|
+|`estimators/` — Laplace, nested Monte Carlo (standard + goal-oriented), VNMC, PCE|implemented|
+|`viz/` — reconstruction, spectrum, bounds, design plots|implemented|
+|`surrogates/` — neural forward surrogates|planned (optional deps only, no code yet)|
 
 ---
 

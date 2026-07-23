@@ -65,7 +65,7 @@ def test_beta_is_one_in_standard_setting(diagnostics):
 
 
 def test_spectrum_sums_to_gap(diagnostics):
-    """⭐ `½ sum(ln alpha + ln beta) == gap(I_p)`.
+    """`½ sum(ln alpha + ln beta) == gap(I_p)`.
 
     Two paths: a generalized `eigvalsh` on one side, `slogdet` of submatrices on
     the other. The gap **is** the sum of the generalized log-eigenvalues, and the

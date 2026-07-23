@@ -1,6 +1,6 @@
 r"""Compute the two certified bound families on ``EIG(design)`` -- Cor. 1 and Cor. 2.
 
-⚠️ **The direction trap.** The *same* pair ``(A, B)`` gives **opposite**
+**The direction trap.** The *same* pair ``(A, B)`` gives **opposite**
 bounds depending on the strategy:
 
 ===============================  ==========================  ==================
@@ -165,7 +165,7 @@ def conservative_bounds(
 
     Notes
     -----
-    ⚠️ **Why not estimate ``eig_full`` by Monte Carlo.** The NumPy prototype
+    **Why not estimate ``eig_full`` by Monte Carlo.** The NumPy prototype
     injects an MC-estimated ``eig_offset`` into (17)-(18) -- which
     **decertifies** the bound: a guaranteed enclosure plus a noisy estimate is
     no longer an enclosure.

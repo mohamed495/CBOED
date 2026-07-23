@@ -33,10 +33,19 @@ gradient stays substantial (~75% measured with default settings): the gap
 when formally valid. See the ``max_eig(R - Sigma_obs)`` diagnostic print for
 each route before reading the figures.
 
+Also runs in the goal-oriented (GO) case (``--case go``): the noise route
+then targets the QoI (``theta = eta[:N_QOI]``, the first half of the field)
+rather than the full ``eta``, using ``gradient_diagnostics``/``Sigma_xi``
+instead of ``gradient_diagnostics_standard``/``Sigma_obs`` for the gradient
+reference -- mirroring ``paper_protocol.py``'s ``compute_repeat``. The signal
+route (``f: Y -> u``) is identical in both cases: only the noise route
+(``g: (Y, theta) -> u``) depends on ``theta``.
+
 Usage
 -----
     pixi run -e test python tutorials/compare_signal_noise_methods.py
     pixi run -e test python tutorials/compare_signal_noise_methods.py --lambda 0.5 --n-samples 20000 --net-steps 500
+    pixi run -e test python tutorials/compare_signal_noise_methods.py --case go
 """
 
 import argparse
@@ -47,16 +56,18 @@ import jax.numpy as jnp
 import jax.random as jr
 import numpy as np
 
-from cboed.benchmarks import SIGMA_OBS_MATRIX, forward, make_prior
+from cboed.benchmarks import N_QOI, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, forward, make_prior, qoi_projection
 from cboed.bounds.diagnostics.approximation_based import (
     approximation_noise,
     approximation_signal,
     denoiser_residual,
 )
 from cboed.bounds.diagnostics.denoisers import AffineDenoiser, ResidualDenoiser
-from cboed.bounds.diagnostics.gradient_based import gradient_diagnostics_standard
+from cboed.bounds.diagnostics.gradient_based import gradient_diagnostics, gradient_diagnostics_standard
 from cboed.viz.matrices import plot_matrix_comparison, plot_spectrum_comparison
 from cboed.viz.style import save, use_style
+
+QOI_H = qoi_projection(N_QOI)
 
 
 def paired_samples(u, prior, Sigma_obs, key, n):
@@ -99,6 +110,11 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--lambda", dest="lambda_", type=float, default=0.5)
     p.add_argument(
+        "--case", choices=("standard", "go"), default="standard",
+        help="'standard': theta = eta (full field). 'go': theta = eta[:N_QOI] (QoI only),"
+             " matching paper_protocol.py's goal-oriented case.",
+    )
+    p.add_argument(
         "--n-samples", type=int, default=20_000, help="(u, Y) pairs for the denoisers"
     )
     p.add_argument("--n-gradient", type=int, default=300, help="Jacobians for the gradient route")
@@ -114,21 +130,27 @@ def main() -> None:
     u = forward(args.lambda_)
     k_pairs, k_grad, k_net_f, k_net_g = jr.split(jr.key(0), 4)
 
-    print(f"[pairs] lambda={args.lambda_}, n_samples={args.n_samples}")
+    print(f"[pairs] case={args.case}, lambda={args.lambda_}, n_samples={args.n_samples}")
     u_vals, Y, eta = paired_samples(u, prior, SIGMA_OBS_MATRIX, k_pairs, args.n_samples)
-    features_g = jnp.concatenate([Y, eta], axis=1)
+    theta_for_noise = eta if args.case == "standard" else eta[:, :N_QOI]
+    features_g = jnp.concatenate([Y, theta_for_noise], axis=1)
 
     print(f"[gradient] n_gradient={args.n_gradient}")
-    Sigma_signal_grad, Sigma_noise_grad = gradient_diagnostics_standard(
-        u, prior, SIGMA_OBS_MATRIX, k_grad, args.n_gradient
-    )
+    if args.case == "standard":
+        Sigma_signal_grad, Sigma_noise_grad = gradient_diagnostics_standard(
+            u, prior, SIGMA_OBS_MATRIX, k_grad, args.n_gradient
+        )
+    else:
+        Sigma_signal_grad, Sigma_noise_grad = gradient_diagnostics(
+            u, QOI_H, prior, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_grad, args.n_gradient
+        )
 
     print("[affine approximation]")
     denoiser_f_affine = AffineDenoiser.fit(u_vals, Y)
     denoiser_g_affine = AffineDenoiser.fit(u_vals, features_g)
     report_gap("affine, f: Y->u", denoiser_residual(denoiser_f_affine, u_vals, Y), SIGMA_OBS_MATRIX)
     report_gap(
-        "affine, g: (Y,eta)->u",
+        "affine, g: (Y,theta)->u",
         denoiser_residual(denoiser_g_affine, u_vals, features_g),
         SIGMA_OBS_MATRIX,
     )
@@ -141,7 +163,7 @@ def main() -> None:
         denoiser_g_affine,
         u_vals,
         Y,
-        eta,
+        theta_for_noise,
         SIGMA_OBS_MATRIX,
     )
 
@@ -150,7 +172,7 @@ def main() -> None:
     denoiser_g_nn = ResidualDenoiser.fit(u_vals, features_g, k_net_g, steps=args.net_steps)
     report_gap("affine+NN, f: Y->u", denoiser_residual(denoiser_f_nn, u_vals, Y), SIGMA_OBS_MATRIX)
     report_gap(
-        "affine+NN, g: (Y,eta)->u",
+        "affine+NN, g: (Y,theta)->u",
         denoiser_residual(denoiser_g_nn, u_vals, features_g),
         SIGMA_OBS_MATRIX,
     )
@@ -158,7 +180,7 @@ def main() -> None:
         "affine+NN signal", approximation_signal, denoiser_f_nn, u_vals, Y, SIGMA_OBS_MATRIX
     )
     Sigma_noise_nn = try_assemble(
-        "affine+NN noise", approximation_noise, denoiser_g_nn, u_vals, Y, eta, SIGMA_OBS_MATRIX
+        "affine+NN noise", approximation_noise, denoiser_g_nn, u_vals, Y, theta_for_noise, SIGMA_OBS_MATRIX
     )
 
     signals = [("gradient (Sec. 3.3)", Sigma_signal_grad)]
@@ -198,17 +220,17 @@ def main() -> None:
                 [S for _, S in noises],
                 [lbl for lbl, _ in noises],
                 reference=0,
-                title=rf"$\Sigma_{{noise}}$: gradient vs approximation -- $\lambda={args.lambda_}$",
+                title=rf"$\Sigma_{{noise}}$: gradient vs approximation -- {args.case}, $\lambda={args.lambda_}$",
             ),
-            out / f"noise_comparison_lambda_{args.lambda_:.2f}.png",
+            out / f"noise_comparison_{args.case}_lambda_{args.lambda_:.2f}.png",
         )
         save(
             plot_spectrum_comparison(
                 [S for _, S in noises],
                 [f"$\\Sigma_{{noise}}$ {lbl}" for lbl, _ in noises],
-                title=rf"Spectra $\Sigma_{{noise}}$ -- $\lambda={args.lambda_}$",
+                title=rf"Spectra $\Sigma_{{noise}}$ -- {args.case}, $\lambda={args.lambda_}$",
             ),
-            out / f"noise_spectra_lambda_{args.lambda_:.2f}.png",
+            out / f"noise_spectra_{args.case}_lambda_{args.lambda_:.2f}.png",
         )
 
     print("[relative gaps vs gradient]")

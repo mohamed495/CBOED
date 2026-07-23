@@ -26,11 +26,11 @@ linear.
 
 Notes
 -----
-⚠️ **Pick-freeze (Rem. 3.2) does not apply to this test bench.** It requires
+**Pick-freeze (Rem. 3.2) does not apply to this test bench.** It requires
 ``eta_1 ⊥ eta_2``; the two halves of the field come from the same GP, so
 ``Sigma_{theta eta} ≠ 0``. It is Rem. 3.1 that applies here.
 
-⚠️ Unlike Prop. 4, this route is **regular at ``Sigma_xi = 0``**: Rem. 3.1
+Unlike Prop. 4, this route is **regular at ``Sigma_xi = 0``**: Rem. 3.1
 stays valid without noise (``eta|theta`` degenerates cleanly into a
 ``delta``). Where the gradient route has a singular limit, the sample route
 does not.

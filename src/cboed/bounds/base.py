@@ -46,12 +46,12 @@ class DiagnosticMatrices:
 
     Notes
     -----
-    ⚠️ ``certified`` is not decorative. A certified bound must **refuse** an
+    ``certified`` is not decorative. A certified bound must **refuse** an
     uncertified diagnostic, or degrade its own result -- never stay silent.
     That is the only honest way to let two routes coexist when only one of
     them certifies.
 
-    ⚠️ Not to be confused with ``BoundResult.is_certified`` ("is the gap below
+    Not to be confused with ``BoundResult.is_certified`` ("is the gap below
     the tolerance?"). Two useful, distinct notions.
     """
 

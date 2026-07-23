@@ -237,7 +237,7 @@ def quasi_optimality(diagnostics: DiagnosticMatrices) -> QuasiOptimality:
 
     Notes
     -----
-    ⚠️ ``eigvalsh`` on dense ``p x p`` matrices: this is a **diagnostic**, not
+    ``eigvalsh`` on dense ``p x p`` matrices: this is a **diagnostic**, not
     a production path. The bounds and the greedy algorithm never need it --
     they go through Cholesky and Schur complements instead.
     """

@@ -1,6 +1,6 @@
 r"""Plot certified EIG bounds as a function of the sensor budget.
 
-⚠️ **Direction trap.** The same pair ``(A, B)`` gives **opposite** bounds
+**Direction trap.** The same pair ``(A, B)`` gives **opposite** bounds
 depending on the strategy:
 
 ===============================  ==========================  ==================

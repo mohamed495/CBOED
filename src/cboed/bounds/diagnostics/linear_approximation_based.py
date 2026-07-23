@@ -145,7 +145,7 @@ def _assemble_from_residual(
 
     Notes
     -----
-    ⚠️ Well defined **iff** ``R ≺ Sigma_obs`` (Prop. 3, guaranteed if ``F``
+    Well defined **iff** ``R ≺ Sigma_obs`` (Prop. 3, guaranteed if ``F``
     contains the affines and ``N`` is large enough). Otherwise the
     parenthesized term stops being SDP and the inverse does not exist -- the
     price of not being certified.

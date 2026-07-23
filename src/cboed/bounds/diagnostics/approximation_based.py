@@ -102,7 +102,7 @@ def assemble_from_residual(
 
     Notes
     -----
-    ⚠️ **§3.2 is least reliable in the linear regime** -- the opposite of
+    **§3.2 is least reliable in the linear regime** -- the opposite of
     §3.3. When the denoiser is nearly exact (at ``lambda = 0``, the affine one
     is), ``R -> Sigma_obs`` from below with a margin on the order of
     ``1e-6``: the precision becomes nearly singular. The paper says so: well
@@ -116,7 +116,7 @@ def assemble_from_residual(
     with ``sigma_MC ~ trace(R)/n / sqrt(N)``: it only catches what CANNOT come
     from estimation noise.
 
-    ⚠️ No ``jit``: the ``if`` below tests a value that depends on ``R`` (thus
+    No ``jit``: the ``if`` below tests a value that depends on ``R`` (thus
     traced under jit), and ``ValueError`` requires a concrete bool. Same
     limitation for :func:`approximation_signal`/:func:`approximation_noise`,
     which call this function.

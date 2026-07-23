@@ -63,7 +63,7 @@ def moments():
 
 
 def test_misfit_matches_direct(prior_eta, moments):
-    """⭐ `assemble` and `assemble_misfit`: two paths, one matrix.
+    """`assemble` and `assemble_misfit`: two paths, one matrix.
 
     The identity: `(H + Sigma^{-1})^{-1} = Ssq (I + Ssq H Ssq)^{-1} Ssq`.
 

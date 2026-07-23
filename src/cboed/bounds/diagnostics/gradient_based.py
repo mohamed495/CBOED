@@ -300,7 +300,7 @@ def assemble_misfit(
     Only uses ``Sigma_eta^{1/2}``, never ``Sigma_eta^{-1}``. This is what will
     survive once the prior precision can no longer be formed.
 
-    ⚠️ ``A_mis`` **is already the inverse**: the term is ``A_mis @ L``, not
+    ``A_mis`` **is already the inverse**: the term is ``A_mis @ L``, not
     ``solve(A_mis, L)``. The NumPy prototype did the latter -- a 248% relative
     error, and the result stayed SDP, so it went unnoticed.
     """

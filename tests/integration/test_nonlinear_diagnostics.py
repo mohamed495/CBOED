@@ -65,7 +65,7 @@ def setup():
 
 @pytest.mark.slow
 def test_H_matches_hadamard_formula(setup):
-    """⭐ `H(u) = 4 (Sigma_theta ⊙ Sigma_obs^{-1})` -- the nonlinear branch.
+    """`H(u) = 4 (Sigma_theta ⊙ Sigma_obs^{-1})` -- the nonlinear branch.
 
     This is THE missing test: `H(u)` is the one quantity that distinguishes
     Prop. 4 from an LG computation, and it is zero everywhere else in the
@@ -112,7 +112,7 @@ def test_H_is_zero_for_linear_u(setup):
 
 @pytest.mark.slow
 def test_Sigma_Y_matches_isserlis(setup):
-    """⭐ §3.1 in the nonlinear case: `Cov(theta**2)_ij = 2 Sigma_ij^2 + 4 m_i m_j Sigma_ij`.
+    """§3.1 in the nonlinear case: `Cov(theta**2)_ij = 2 Sigma_ij^2 + 4 m_i m_j Sigma_ij`.
 
     The paired estimator (26) has never been tested on anything but a linear
     model, where `Cov(u) = A Sigma A^T` -- a form that any centering bug would

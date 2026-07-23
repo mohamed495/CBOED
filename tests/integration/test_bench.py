@@ -47,7 +47,7 @@ def test_bench_is_resolved(draws, lambda_):
 
 
 def test_lg_reference_at_lambda_zero():
-    """⭐ The exact reference: at `lambda=0`, no quantity needs Monte Carlo.
+    """The exact reference: at `lambda=0`, no quantity needs Monte Carlo.
 
         J = Jacobian (constant)
         Sigma_Y = Sigma_signal = Sigma_obs + J Sigma_theta J^T

@@ -158,7 +158,7 @@ def schur_gain_diagonal(
 
     Notes
     -----
-    ⚠️ The masking is **mandatory**, not defensive. For ``j`` already
+    The masking is **mandatory**, not defensive. For ``j`` already
     selected, both diagonal entries are ~1e-16: the ratio becomes a quotient
     of rounding noise, finite and arbitrary. Without the mask, the greedy
     algorithm silently reselects a sensor already taken.
