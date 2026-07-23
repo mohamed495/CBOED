@@ -8,9 +8,13 @@ from jaxtyping import Float
 @jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class DiagnosticMatrices:
-    r"""``Sigma_Y``, ``Sigma_Y_given_theta``, ``Sigma_signal``, ``Sigma_noise``.
+    r"""Container for the four diagnostic matrices of Theorem 2.1.
 
-    They come from **two distinct sources**, never a single one:
+    Bundles ``Sigma_Y``, ``Sigma_Y_given_theta``, ``Sigma_signal`` and
+    ``Sigma_noise`` -- the matrices consumed by :func:`cboed.bounds.bounds.incremental_bounds`
+    and :func:`cboed.bounds.bounds.conservative_bounds` to certify an
+    enclosure of ``EIG(design)``. They come from **two distinct sources**,
+    never a single one:
 
     ===================  ==========================  ====================
     Matrices             Route                       Alternative

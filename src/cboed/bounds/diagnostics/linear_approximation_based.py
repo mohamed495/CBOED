@@ -1,4 +1,4 @@
-r"""Approximation-based diagnostic matrices -- §3.2.
+r"""Compute affine-approximation-based diagnostic matrices -- §3.2.
 
 Third route to ``Sigma_signal`` and ``Sigma_noise``, alongside :mod:`sample_based`
 (§3.1) and :mod:`gradient_based` (§3.3). All three produce the **same** two
@@ -57,7 +57,7 @@ def affine_denoiser(
     u_samples: Float[Array, "n_samples n_obs"],
     features: Float[Array, "n_samples n_feat"],
 ) -> tuple[Float[Array, "n_obs n_feat"], Float[Array, " n_obs"]]:
-    r"""Affine denoiser ``f(Y) = A Y + b`` via least squares -- closed form.
+    r"""Fit the affine denoiser ``f(Y) = A Y + b`` via least squares -- closed form.
 
     .. math::
         A = \mathrm{Cov}(u, Y)\,\mathrm{Cov}(Y)^{-1}, \qquad b = E[u] - A\,E[Y]
@@ -69,6 +69,13 @@ def affine_denoiser(
     features : Float[Array, "n_samples n_feat"]
         The denoiser's inputs. ``Y`` for ``f`` (n_feat = n_obs); ``(Y, theta)``
         concatenated for ``g`` (n_feat = n_obs + n_param).
+
+    Returns
+    -------
+    A : Float[Array, "n_obs n_feat"]
+        Linear coefficient.
+    b : Float[Array, " n_obs"]
+        Intercept.
 
     Notes
     -----
@@ -99,8 +106,26 @@ def denoiser_residual(
     A: Float[Array, "n_obs n_feat"],
     b: Float[Array, " n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``R_f = (1/N) sum (u - f(Y))^{⊗2}`` -- the denoiser's residual.
+    r"""Compute ``R_f = (1/N) sum (u - f(Y))^{⊗2}`` -- the denoiser's residual.
 
+    Parameters
+    ----------
+    u_samples : Float[Array, "n_samples n_obs"]
+        The ``u(eta^{(i)})`` -- the target to denoise.
+    features : Float[Array, "n_samples n_feat"]
+        The denoiser's inputs (``Y`` or ``(Y, theta)`` concatenated).
+    A : Float[Array, "n_obs n_feat"]
+        Linear coefficient of the affine denoiser (see :func:`affine_denoiser`).
+    b : Float[Array, " n_obs"]
+        Intercept of the affine denoiser.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``R_f``, symmetrized.
+
+    Notes
+    -----
     ``R_f`` **upper-bounds** ``E[Cov(u|Y)]`` (equality iff ``f = E[u|Y]``).
     This is what makes §3.2 uncertified: the matrix is well defined but the
     Loewner order of Thm 2.1 is not guaranteed.
@@ -116,8 +141,10 @@ def _assemble_from_residual(
     R: Float[Array, "n_obs n_obs"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``(Sigma_obs^{-1} - Sigma_obs^{-1} R Sigma_obs^{-1})^{-1}`` -- Prop. 3.
+    r"""Assemble ``(Sigma_obs^{-1} - Sigma_obs^{-1} R Sigma_obs^{-1})^{-1}`` -- Prop. 3.
 
+    Notes
+    -----
     ⚠️ Well defined **iff** ``R ≺ Sigma_obs`` (Prop. 3, guaranteed if ``F``
     contains the affines and ``N`` is large enough). Otherwise the
     parenthesized term stops being SDP and the inverse does not exist -- the
@@ -138,7 +165,7 @@ def approximation_signal(
     Y_samples: Float[Array, "n_samples n_obs"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma^{(N,F)}_signal`` via the affine denoiser ``f : Y -> u(eta)``.
+    r"""Compute ``Sigma^{(N,F)}_signal`` via the affine denoiser ``f : Y -> u(eta)``.
 
     Parameters
     ----------
@@ -146,6 +173,13 @@ def approximation_signal(
         Pairs ``(u(eta^{(i)}), Y^{(i)})`` -- **the ones already drawn for
         ``Sigma_Y``**.
     Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma^{(N,F)}_signal``, an estimator (not certified) of the signal
+        diagnostic matrix.
     """
     A, b = affine_denoiser(u_samples, Y_samples)
     R_f = denoiser_residual(u_samples, Y_samples, A, b)
@@ -160,8 +194,26 @@ def approximation_noise(
     theta_samples: Float[Array, "n_samples n_param"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma^{(N,G)}_noise`` via the affine denoiser ``g : (Y, theta) -> u(eta)``.
+    r"""Compute ``Sigma^{(N,G)}_noise`` via the affine denoiser ``g : (Y, theta) -> u(eta)``.
 
+    Parameters
+    ----------
+    u_samples, Y_samples : Float[Array, "n_samples n_obs"]
+        Pairs ``(u(eta^{(i)}), Y^{(i)})`` already drawn for ``Sigma_Y``.
+    theta_samples : Float[Array, "n_samples n_param"]
+        QoI draws ``theta^{(i)}``, concatenated with ``Y_samples`` to form
+        the denoiser's inputs.
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma^{(N,G)}_noise``, an estimator (not certified) of the noise
+        diagnostic matrix.
+
+    Notes
+    -----
     ``g`` sees ``theta`` in addition to ``Y``: it denoises better, so
     ``R_g ⪯ R_f``, hence ``Sigma_noise ⪯ Sigma_signal`` -- the gap **is**
     ``gap_h``.

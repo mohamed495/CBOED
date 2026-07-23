@@ -1,4 +1,4 @@
-r"""Greedy via Schur complements -- ``O(n_sensors * p²)``.
+r"""Select a design greedily via Schur complements, in ``O(n_sensors * p^2)``.
 
 Greedy selection of the design maximizing a generalized Rayleigh quotient
 
@@ -10,20 +10,21 @@ does not know where they come from: ``(Sigma_signal, Sigma_Y_given_theta)``
 gives the incremental lower bound (19), ``(Sigma_Y, Sigma_noise)`` the
 conservative lower bound (20).
 
-Why this is tractable
-----------------------
-The generic greedy (``optim/greedy.py``) evaluates the criterion as a black
-box: ``n_candidates * n_sensors`` calls, each refactorizing
-``Gamma_post^{-1}``. Here:
+Notes
+-----
+**Why this is tractable.** The generic greedy (:mod:`cboed.optim.greedy`)
+evaluates the criterion as a black box: ``n_candidates * n_sensors`` calls,
+each refactorizing ``Gamma_post^{-1}``. Here:
 
 * the marginal gain of a candidate is a **ratio of two diagonal entries** of
   the conditioned matrices -- ``O(1)`` per candidate;
-* adding a sensor is a **rank-1 update** of the two matrices -- ``O(p²)``.
+* adding a sensor is a **rank-1 update** of the two matrices -- ``O(p^2)``.
 
 No factorization, no call to the forward model: the whole cost of the model
 is already paid, once, when building ``A`` and ``B``.
 
-Warning: ``optim/greedy.py`` remains the **oracle** for this module. Do not remove it.
+Warning: :mod:`cboed.optim.greedy` remains the **oracle** for this module.
+Do not remove it.
 """
 
 import jax
@@ -42,7 +43,7 @@ def greedy_schur(
     Sigma_den: Float[Array, "n_obs n_obs"],
     n_sensors: int,
 ) -> Result:
-    r"""Greedy design maximizing ``½ ln |W^T A W| / |W^T B W|``.
+    r"""Select a greedy design maximizing ``½ ln |W^T A W| / |W^T B W|``.
 
     Parameters
     ----------
@@ -107,8 +108,23 @@ def log_ratio(
     Sigma_den: Float[Array, "n_obs n_obs"],
     design: Array,
 ) -> Float[Array, ""]:
-    r"""``½ ln |W^T A W| / |W^T B W|`` evaluated directly.
+    r"""Evaluate ``½ ln |W^T A W| / |W^T B W|`` directly, for a given design.
 
+    Parameters
+    ----------
+    Sigma_num, Sigma_den : Float[Array, "n_obs n_obs"]
+        Numerator ``A`` and denominator ``B``, SDP, **unconditioned**.
+    design : Array
+        Indices of the selected sensors.
+
+    Returns
+    -------
+    Float[Array, ""]
+        ``½ ln |W^T A W| / |W^T B W|`` for the submatrices indexed by
+        `design`.
+
+    Notes
+    -----
     Path independent of :func:`greedy_schur`: submatrices and ``slogdet``,
     no Schur complement. This is the oracle for ``scores``.
     """

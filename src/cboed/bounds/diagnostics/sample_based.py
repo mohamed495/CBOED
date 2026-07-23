@@ -1,4 +1,4 @@
-r"""Sample-based diagnostic matrices -- §3.1.
+r"""Compute sample-based diagnostic matrices -- §3.1.
 
 Provides ``Sigma_Y`` and ``Sigma_{Y|theta}``. **No alternative**: unlike
 ``Sigma_signal``/``Sigma_noise``, which have two routes (§3.2 and §3.3),
@@ -21,16 +21,16 @@ error of the kind that threatens ``E[X X^T] - \bar{X}\bar{X}^T``. Cost:
 ``Sigma_{Y|theta}`` follows the same form with ``eta, eta'`` **conditionally
 independent given theta** (27): ``eta ~ pi_eta``, ``theta ~ pi_{theta|eta}``,
 ``eta' ~ pi_{eta|theta}``. The last draw is the paper's bottleneck -- it
-generally requires MCMC. Remark 3.1 gives it in closed form when ``h`` is
+generally requires MCMC. Rem. 3.1 gives it in closed form when ``h`` is
 linear.
 
 Notes
 -----
 ⚠️ **Pick-freeze (Rem. 3.2) does not apply to this test bench.** It requires
 ``eta_1 ⊥ eta_2``; the two halves of the field come from the same GP, so
-``Sigma_{theta eta} ≠ 0``. It is Remark 3.1 that applies here.
+``Sigma_{theta eta} ≠ 0``. It is Rem. 3.1 that applies here.
 
-⚠️ Unlike Prop. 4, this route is **regular at ``Sigma_xi = 0``**: Remark 3.1
+⚠️ Unlike Prop. 4, this route is **regular at ``Sigma_xi = 0``**: Rem. 3.1
 stays valid without noise (``eta|theta`` degenerates cleanly into a
 ``delta``). Where the gradient route has a singular limit, the sample route
 does not.
@@ -52,7 +52,7 @@ from cboed.priors.base import Prior
 def _paired_covariance(
     diffs: Float[Array, "n_samples n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``(1/2N) sum_i d_i d_i^T`` -- the estimator (26)/(27)."""
+    r"""Compute ``(1/2N) sum_i d_i d_i^T`` -- the estimator (26)/(27), given the paired diffs."""
     out = 0.5 * diffs.T @ diffs / diffs.shape[0]
     return 0.5 * (out + out.T)
 
@@ -60,9 +60,11 @@ def _paired_covariance(
 @jax.jit
 @jaxtyped(typechecker=beartype)
 def _psd_sqrt(A: Float[Array, "n n"]) -> Float[Array, "n n"]:
-    r"""PSD square root via ``eigh``, eigenvalues clipped to zero.
+    r"""Compute a PSD square root of ``A`` via ``eigh``, eigenvalues clipped to zero.
 
-    Not ``cholesky``: the posterior covariance of Remark 3.1 **degenerates**
+    Notes
+    -----
+    Not ``cholesky``: the posterior covariance of Rem. 3.1 **degenerates**
     to zero when ``Sigma_xi -> 0`` and ``B = I`` (``eta|theta`` becomes a
     Dirac). This is a nominal case, not an accident -- and LAPACK returns
     ``nan`` on a singular PSD matrix.
@@ -80,17 +82,28 @@ def sample_Sigma_Y(
     key: PRNGKeyArray,
     n_samples: int,
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma_Y = Sigma_obs + Cov(u(eta))`` -- equation (26).
+    r"""Compute ``Sigma_Y = Sigma_obs + Cov(u(eta))`` -- equation (26).
+
+    Uses the paired-difference estimator
+    ``Cov(u(eta)) = (1/2N) sum (u(eta) - u(eta'))^{⊗2}`` (see module docstring).
 
     Parameters
     ----------
     u : Callable
         Forward model ``eta -> observations``, without a design.
     prior_eta : Prior
+        Prior on ``eta``.
     Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
     key : PRNGKeyArray
+        Random key, split into two independent draws ``eta``, ``eta'``.
     n_samples : int
         Number of **pairs**. Cost: ``2 * n_samples`` evaluations of ``u``.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma_Y``.
     """
     k1, k2 = jax.random.split(key)
     eta = prior_eta.sample(k1, n_samples)
@@ -110,16 +123,33 @@ def sample_Sigma_Y_given_theta(
     key: PRNGKeyArray,
     n_samples: int,
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma_{Y|theta} = Sigma_obs + E[Cov(u(eta)|theta)]`` -- (27) via Rem. 3.1.
+    r"""Compute ``Sigma_{Y|theta} = Sigma_obs + E[Cov(u(eta)|theta)]`` -- (27) via Rem. 3.1.
 
     Parameters
     ----------
+    u : Callable
+        Forward model ``eta -> observations``, without a design.
+    prior_eta : Prior
+        Prior on ``eta``, assumed Gaussian (mean ``prior_eta.mu``, covariance
+        ``prior_eta.Sigma()``).
     B : Float[Array, "n_param n_eta"]
-        Jacobian of ``h``, **assumed constant**: the closed form of Remark
+        Jacobian of ``h``, **assumed constant**: the closed form of Rem.
         3.1 only exists for linear ``h``. For non-linear ``h``, MCMC
         targeting ``pi_{eta|theta}`` is required -- out of scope here.
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
     Sigma_xi : Float[Array, "n_param n_param"]
         Covariance of ``xi``. **Can be zero**: see Rem. 3.1.
+    key : PRNGKeyArray
+        Random key, split into three independent draws (``theta`` noise,
+        ``xi`` noise, posterior noise).
+    n_samples : int
+        Number of **pairs**. Cost: ``2 * n_samples`` evaluations of ``u``.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma_{Y|theta}``.
 
     Notes
     -----
@@ -161,12 +191,35 @@ def sample_diagnostics_standard(
     key: PRNGKeyArray,
     n_samples: int,
 ) -> tuple[Float[Array, "n_obs n_obs"], Float[Array, "n_obs n_obs"]]:
-    r"""``(Sigma_Y, Sigma_Y_given_theta)`` in the standard case ``Y = u(theta) + eps``.
+    r"""Compute ``(Sigma_Y, Sigma_Y_given_theta)`` in the standard case ``Y = u(theta) + eps``.
 
+    Parameters
+    ----------
+    u : Callable
+        Forward model ``theta -> observations``, without a design.
+    prior_theta : Prior
+        Prior on ``theta``.
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+    key : PRNGKeyArray
+        Random key for sampling ``theta``.
+    n_samples : int
+        Number of **pairs**. Cost: ``2 * n_samples`` evaluations of ``u``.
+
+    Returns
+    -------
+    Sigma_Y : Float[Array, "n_obs n_obs"]
+        From :func:`sample_Sigma_Y`.
+    Sigma_Y_given_theta : Float[Array, "n_obs n_obs"]
+        ``Sigma_obs``, exactly (see Notes).
+
+    Notes
+    -----
     Prop. 2 with ``h = id`` and ``xi = 0`` gives ``E[Cov(u(theta)|theta)] = 0``,
     hence ``Sigma_Y_given_theta = Sigma_obs`` **exactly**. No sampling
     needed: this is an equality to posit, not a limit to approximate.
 
-    Symmetric to ``gradient_diagnostics_standard``, and for the same reason.
+    Symmetric to :func:`cboed.bounds.diagnostics.gradient_based.gradient_diagnostics_standard`,
+    and for the same reason.
     """
     return sample_Sigma_Y(u, prior_theta, Sigma_obs, key, n_samples), Sigma_obs

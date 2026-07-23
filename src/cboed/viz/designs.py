@@ -1,4 +1,4 @@
-r"""Designs: sensor positions, comparison of greedy strategies.
+r"""Plot sensor designs: positions, scores, costs, and overlay on the field.
 
 The overlap between two designs is **not** the right metric: on a diffusive
 field, different placements can carry the same information. What matters is
@@ -12,15 +12,32 @@ from cboed.viz.style import COLORS
 
 
 def plot_sensor_positions(x, designs, m=None, ax=None, title=""):
-    """Positions selected by each strategy, one row per design.
+    """Plot the sensor positions selected by each strategy, one row per design.
+
+    Each row shows the selected positions as tick markers, colored by
+    selection rank (early picks vs. late picks), with the insertion order
+    annotated above each marker.
 
     Parameters
     ----------
-    designs : dict[str, array]
+    x : array_like, shape (n,)
+        Spatial grid.
+    designs : dict[str, array_like]
+        One entry per design, e.g.
         ``{"iEIG>= (19)": indices, "cEIG>= (20)": indices, ...}``. Insertion
-        order is respected: color encodes rank.
-    m : int or None
-        Truncate to ``m`` sensors.
+        order of the dict sets the row order; within each row, color encodes
+        the rank of selection.
+    m : int, optional
+        Truncate each design to its first `m` sensors.
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw on. A new figure is created if not given.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The parent figure of `ax`.
     """
     ax = ax or plt.subplots(figsize=(8, 0.7 * len(designs) + 1.2))[1]
     x = np.asarray(x)
@@ -59,14 +76,23 @@ def plot_sensor_positions(x, designs, m=None, ax=None, title=""):
 
 
 def plot_greedy_comparison(ms, scores, title=""):
-    """Score as a function of ``m``, one curve per greedy strategy.
+    """Plot criterion score as a function of ``m``, one curve per greedy strategy.
 
     Parameters
     ----------
-    scores : dict[str, array]
-        ``{"naive": ..., "batch": ..., "schur": ...}`` -- **all evaluated
-        with the same criterion**. Comparing scores from different criteria
-        would be meaningless.
+    ms : array_like, shape (M,)
+        Sensor budgets.
+    scores : dict[str, array_like]
+        One score curve per strategy, shape ``(M,)`` each, e.g.
+        ``{"naive": ..., "batch": ..., "schur": ...}``. All curves must be
+        evaluated with the same criterion -- comparing scores from different
+        criteria would be meaningless.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
 
     Notes
     -----
@@ -86,14 +112,23 @@ def plot_greedy_comparison(ms, scores, title=""):
 
 
 def plot_greedy_cost(ms, costs, title=""):
-    """Cost of each greedy strategy as a function of ``m``, log scale.
+    """Plot the cost of each greedy strategy as a function of ``m``, log scale.
 
     Parameters
     ----------
-    costs : dict[str, array]
-        Cost per strategy -- number of black-box criterion evaluations for
-        ``naive``/``batch``, flops for ``schur``. Heterogeneous units, hence
-        the log scale: only the order of magnitude is comparable.
+    ms : array_like, shape (M,)
+        Sensor budgets.
+    costs : dict[str, array_like]
+        Cost per strategy, shape ``(M,)`` each -- number of black-box
+        criterion evaluations for ``naive``/``batch``, flops for ``schur``.
+        Units are heterogeneous across strategies, hence the log scale: only
+        the order of magnitude is comparable.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
     """
     fig, ax = plt.subplots(figsize=(6.5, 4))
     for label, c in costs.items():
@@ -108,13 +143,30 @@ def plot_greedy_cost(ms, costs, title=""):
 
 
 def plot_design_on_field(x, field, designs, title=""):
-    """Sensors overlaid on the field -- where is the information taken from?
+    """Plot sensor positions overlaid on a reference field.
+
+    Answers "where is the information taken from?": the field is drawn as a
+    filled curve, and each design's sensors are drawn as vertical lines at a
+    height that decreases with the design's position in `designs`, so
+    overlapping designs remain distinguishable.
 
     Parameters
     ----------
-    field : (n,)
+    x : array_like, shape (n,)
+        Spatial grid.
+    field : array_like, shape (n,)
         A reference field: prior ``std``, ``|E[u]|``, or the diagonal of
         ``Sigma_Y - Sigma_signal`` (where the non-Gaussianity resides).
+    designs : dict[str, array_like]
+        One entry per design (indices into `x`). The first entry is colored
+        as incremental, every other entry as conservative -- only two colors
+        are used regardless of how many designs are given.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
     """
     fig, ax = plt.subplots(figsize=(8, 3.4))
     x = np.asarray(x)

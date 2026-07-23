@@ -15,12 +15,24 @@ from cboed.priors.base import Prior
 
 
 class LinearModel(InferenceModel):
-    r"""Gaussian posterior via linearization.
+    r"""Compute the Gaussian posterior via linearization of the forward model.
 
     .. math::
         \Gamma_{post}^{-1} = \Gamma_{prior}^{-1} + J^T \Sigma_{obs}^{-1} J
 
     Exact if the forward model is linear; a Laplace approximation otherwise.
+
+    Parameters
+    ----------
+    prior : Prior
+        Prior on ``theta``.
+    likelihood : Likelihood
+        Likelihood ``p(y | theta, design)``.
+
+    Examples
+    --------
+    >>> inference = LinearModel(prior=gaussian_prior, likelihood=likelihood)  # doctest: +SKIP
+    >>> inference.log_det_posterior_precision(theta, design)  # doctest: +SKIP
     """
 
     def __init__(self, **hyperparameters) -> None:
@@ -28,10 +40,12 @@ class LinearModel(InferenceModel):
 
     @property
     def prior(self) -> Prior:
+        """The :class:`~cboed.priors.base.Prior` on ``theta``."""
         return self._hyperparameters["prior"]
 
     @property
     def likelihood(self) -> Likelihood:
+        """The :class:`~cboed.likelihood.base.Likelihood`, ``p(y | theta, design)``."""
         return self._hyperparameters["likelihood"]
 
     # -- precision and factorization ---------------------------------------
@@ -43,8 +57,23 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param n_param"]:
-        r"""``Gamma_post^{-1}``, dense.
+        r"""Compute the dense posterior precision ``Gamma_post^{-1}``.
 
+        Parameters
+        ----------
+        theta : Float[Array, " n_param"]
+            Linearization point.
+        design : Int[Array, " n_sensors"] or None, optional
+            Indices of the observed sensors. ``None`` means the full field
+            is observed.
+
+        Returns
+        -------
+        Float[Array, "n_param n_param"]
+            ``-(prior.hessian() + likelihood.hessian(theta, design))``.
+
+        Notes
+        -----
         The global ``-`` sign turns the sum of two **negative** Hessians into
         a **positive** precision: it is what guarantees that ``cho_factor``
         receives an SPD matrix.
@@ -60,8 +89,12 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> tuple[Float[Array, "n_param n_param"], bool]:
-        """Shared factorization. ``y``-independent: hoistable out of loops.
+        """Compute the shared Cholesky factorization of the posterior precision.
 
+        ``y``-independent: hoistable out of loops.
+
+        Notes
+        -----
         Warning: no ``jit`` here: the output of ``cho_factor`` contains a
         ``bool`` (``lower``), and jit reboxes scalar outputs as ``jax.Array``
         -- the downstream ``cho_solve`` needs a concrete Python ``bool`` for
@@ -80,12 +113,35 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, ""]:
+        """Compute ``log det Gamma_post^{-1}`` at ``theta``.
+
+        Parameters
+        ----------
+        theta : Float[Array, " n_param"]
+            Linearization point.
+        design : Int[Array, " n_sensors"] or None, optional
+            Indices of the observed sensors. ``None`` means the full field
+            is observed.
+
+        Returns
+        -------
+        Float[Array, ""]
+            ``2 sum log diag L``, from the Cholesky factor ``L`` of
+            ``Gamma_post^{-1}``.
+        """
         chol = self._posterior_chol(theta, design)
         return 2.0 * jnp.sum(jnp.log(jnp.diag(chol[0])))
 
     @partial(jax.jit, static_argnums=(0,))
     @jaxtyped(typechecker=beartype)
     def log_det_prior_precision(self) -> Float[Array, ""]:
+        """Compute ``log det Gamma_prior^{-1}``.
+
+        Returns
+        -------
+        Float[Array, ""]
+            Delegated to ``self.prior.log_det_precision()``.
+        """
         return self.prior.log_det_precision()
 
     @partial(jax.jit, static_argnums=(0,))
@@ -96,10 +152,25 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param k"]:
-        r"""``Gamma_post @ B``: a single ``cho_solve`` on the k columns.
+        r"""Compute ``Gamma_post @ B`` with a single ``cho_solve`` on the ``k`` columns.
 
-        ``O(d^2 k)`` -- instead of materializing ``Gamma_post`` in ``O(d^3)``
-        only to then project onto k directions.
+        Parameters
+        ----------
+        B : Float[Array, "n_param k"]
+            Matrix of ``k`` directions to propagate through the posterior
+            covariance.
+        theta : Float[Array, " n_param"]
+            Linearization point.
+        design : Int[Array, " n_sensors"] or None, optional
+            Indices of the observed sensors. ``None`` means the full field
+            is observed.
+
+        Returns
+        -------
+        Float[Array, "n_param k"]
+            ``Gamma_post @ B``, in ``O(d^2 k)`` -- instead of materializing
+            ``Gamma_post`` in ``O(d^3)`` only to then project onto ``k``
+            directions.
         """
         return jsp.linalg.cho_solve(self._posterior_chol(theta, design), B)
 
@@ -113,6 +184,7 @@ class LinearModel(InferenceModel):
         theta,
         design=None,
     ):
+        """Compute the posterior mean ``mu_post(y)`` by a one-step correction from ``theta``."""
         grad_like = self.likelihood.grad_log_likelihood(
             y=y,
             theta=theta,
@@ -138,7 +210,7 @@ class LinearModel(InferenceModel):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param n_param"]:
-        """``Gamma_post`` dense -- test oracle, the ``B = I`` case.
+        """Compute the dense posterior covariance ``Gamma_post`` -- test oracle, the ``B = I`` case.
 
         Forbidden in high dimension. Do not make anything depend on it: go
         through :meth:`posterior_cov_matmul` instead.
@@ -156,7 +228,28 @@ class LinearModel(InferenceModel):
         design: Int[Array, " n_sensors"] | None = None,
         n_samples: int = 1,
     ) -> Float[Array, "n_samples n_param"]:
-        """Samples from the Gaussian posterior."""
+        """Draw samples from the Gaussian posterior.
+
+        Parameters
+        ----------
+        key : PRNGKeyArray
+            Source of randomness.
+        y : Float[Array, " n_sensors"]
+            Observation.
+        theta : Float[Array, " n_param"]
+            Linearization point.
+        design : Int[Array, " n_sensors"] or None, optional
+            Indices of the observed sensors. ``None`` means the full field
+            is observed.
+        n_samples : int, optional
+            Number of samples to draw. Default 1.
+
+        Returns
+        -------
+        Float[Array, "n_samples n_param"]
+            Samples ``mu_post(y) + L z``, ``z ~ N(0, I)``, ``L`` the
+            Cholesky factor of the (dense) posterior covariance.
+        """
 
         mean = self._mu(y, theta, design)
 

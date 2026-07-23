@@ -1,4 +1,4 @@
-r"""The two bound families -- Corollaries 1 and 2.
+r"""Compute the two certified bound families on ``EIG(design)`` -- Cor. 1 and Cor. 2.
 
 ⚠️ **The direction trap.** The *same* pair ``(A, B)`` gives **opposite**
 bounds depending on the strategy:
@@ -36,7 +36,19 @@ from cboed.bounds.schur import log_ratio
 @jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class BoundResult:
-    """Certified enclosure of ``EIG(design)``."""
+    """Certified enclosure ``[lower, upper]`` of ``EIG(design)``.
+
+    Attributes
+    ----------
+    lower : Float[Array, ""]
+        Certified lower bound on ``EIG(design)``.
+    upper : Float[Array, ""]
+        Certified upper bound on ``EIG(design)``.
+    certified : bool
+        Whether the Loewner order required by Thm 2.1 is guaranteed,
+        inherited from the :class:`~cboed.bounds.base.DiagnosticMatrices`
+        the bound was built from.
+    """
 
     lower: Float[Array, ""]
     upper: Float[Array, ""]
@@ -45,8 +57,15 @@ class BoundResult:
 
     @property
     def gap(self) -> Float[Array, ""]:
-        """``upper - lower``.
+        """Return the width ``upper - lower`` of the enclosure.
 
+        Returns
+        -------
+        Float[Array, ""]
+            ``upper - lower``.
+
+        Notes
+        -----
         Measures the **non-Gaussianity** of ``Y`` and ``Y|theta``, not the
         non-linearity of ``u``: Rem. 2.2 states that the bounds are tight iff
         ``Sigma_signal = Sigma_Y`` and ``Sigma_noise = Sigma_{Y|theta}``, which
@@ -57,7 +76,19 @@ class BoundResult:
         return self.upper - self.lower
 
     def is_tight(self, tolerance: float) -> bool:
-        """``gap < tolerance``. Not to be confused with :attr:`certified`."""
+        """Check whether the enclosure is tight relative to ``tolerance``.
+
+        Parameters
+        ----------
+        tolerance : float
+            Threshold the gap is compared against.
+
+        Returns
+        -------
+        bool
+            ``gap < tolerance``. Not to be confused with :attr:`certified`,
+            which concerns the validity of the enclosure, not its width.
+        """
         return bool(self.gap < tolerance)
 
 
@@ -67,7 +98,7 @@ def incremental_bounds(
     diagnostics: DiagnosticMatrices,
     design: Int[Array, " n_sensors"] | None = None,
 ) -> BoundResult:
-    r"""Corollary 1 -- equations (15)-(16).
+    r"""Compute the incremental bounds on ``EIG(design)`` -- Cor. 1, equations (15)-(16).
 
     .. math::
         \tfrac12 \ln \frac{|W^T \Sigma_{\rm signal} W|}{|W^T \Sigma_{Y|\theta} W|}
@@ -75,7 +106,23 @@ def incremental_bounds(
         \tfrac12 \ln \frac{|W^T \Sigma_Y W|}{|W^T \Sigma_{\rm noise} W|}
 
     Compares the information drawn from ``Y_m = W^T Y`` to that of **no**
-    observation at all (``EIG(∅) = 0``). Fully computable, no unknown term.
+    observation at all (``EIG(emptyset) = 0``). Fully computable, no unknown
+    term.
+
+    Parameters
+    ----------
+    diagnostics : DiagnosticMatrices
+        The four diagnostic matrices ``Sigma_Y``, ``Sigma_Y_given_theta``,
+        ``Sigma_signal``, ``Sigma_noise``.
+    design : Int[Array, " n_sensors"] | None
+        Indices of the selected sensors ``W``. ``None`` uses the full design
+        ``I_p``.
+
+    Returns
+    -------
+    BoundResult
+        Certified lower bound (15) and upper bound (16) on ``EIG(design)``,
+        with ``certified`` inherited from ``diagnostics``.
     """
     return BoundResult(
         lower=log_ratio(diagnostics.Sigma_signal, diagnostics.Sigma_Y_given_theta, design),
@@ -91,7 +138,7 @@ def conservative_bounds(
     design: Int[Array, " n_sensors"] | None = None,
     eig_full: Float[Array, ""] | None = None,
 ) -> BoundResult:
-    r"""Corollary 2 -- equations (17)-(18).
+    r"""Compute the conservative bounds on ``EIG(design)`` -- Cor. 2, equations (17)-(18).
 
     Compares the information drawn from ``Y_m`` to that of the **full**
     dataset ``EIG(I_p)``, hence "conservative": the strategy tries to retain
@@ -100,11 +147,21 @@ def conservative_bounds(
     Parameters
     ----------
     diagnostics : DiagnosticMatrices
+        The four diagnostic matrices ``Sigma_Y``, ``Sigma_Y_given_theta``,
+        ``Sigma_signal``, ``Sigma_noise``.
     design : Int[Array, " n_sensors"] | None
+        Indices of the selected sensors ``W``. ``None`` uses the full design
+        ``I_p`` (in which case the ``delta`` terms below vanish).
     eig_full : Float[Array, ""] | None
         ``EIG(I_p)``, **unknown** in practice. ``None`` (default) -> it is
-        bounded by Corollary 1 applied to ``W = I_p``, which keeps the bounds
+        bounded by Cor. 1 applied to ``W = I_p``, which keeps the bounds
         fully computable **and** certified. See Notes.
+
+    Returns
+    -------
+    BoundResult
+        Certified lower bound (17) and upper bound (18) on ``EIG(design)``,
+        with ``certified`` inherited from ``diagnostics``.
 
     Notes
     -----

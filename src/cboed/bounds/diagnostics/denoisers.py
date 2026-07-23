@@ -1,4 +1,4 @@
-r"""Denoisers for §3.2 -- the approximation space ``F``.
+r"""Construct denoisers for §3.2 -- the approximation space ``F``.
 
 Prop. 3 requires that ``F`` contain the affine functions. We therefore build
 denoisers as a **sum**:
@@ -29,8 +29,14 @@ from jaxtyping import Array, Float, PRNGKeyArray
 
 @runtime_checkable
 class Denoiser(Protocol):
-    """An approximation ``f`` of ``E[u|features]``. ``features`` = ``Y`` (for ``f``)
-    or ``(Y, theta)`` concatenated (for ``g``).
+    """Structural interface for a denoiser ``f`` (or ``g``).
+
+    Any callable ``features -> observations`` of this shape can serve as a
+    denoiser in :mod:`cboed.bounds.diagnostics.approximation_based`, e.g.
+    :class:`AffineDenoiser` or :class:`ResidualDenoiser`.
+
+    An approximation ``f`` of ``E[u|features]``, with ``features`` = ``Y``
+    (for ``f``) or ``(Y, theta)`` concatenated (for ``g``).
     """
 
     def __call__(self, features: Float[Array, " n_feat"]) -> Float[Array, " n_obs"]: ...
@@ -42,10 +48,19 @@ class Denoiser(Protocol):
 
 
 class AffineDenoiser(eqx.Module):
-    r"""``f(Y) = A Y + b`` -- least squares in closed form.
+    r"""Affine denoiser ``f(Y) = A Y + b``, fit by least squares in closed form.
 
-    ``A = Cov(u, Y) Cov(Y)^{-1}``, ``b = E[u] - A E[Y]``. Exact when ``E[u|Y]``
-    is affine, i.e. at ``lambda = 0``.
+    .. math::
+        A = \mathrm{Cov}(u, Y)\,\mathrm{Cov}(Y)^{-1}, \qquad b = E[u] - A\,E[Y]
+
+    Exact when ``E[u|Y]`` is affine, i.e. at ``lambda = 0``.
+
+    Attributes
+    ----------
+    A : Float[Array, "n_obs n_feat"]
+        Linear coefficient.
+    b : Float[Array, " n_obs"]
+        Intercept.
     """
 
     A: Float[Array, "n_obs n_feat"]
@@ -60,7 +75,30 @@ class AffineDenoiser(eqx.Module):
         u_samples: Float[Array, "n_samples n_obs"],
         features: Float[Array, "n_samples n_feat"],
     ) -> "AffineDenoiser":
-        """Regression on the pairs already drawn for ``Sigma_Y`` -- zero marginal cost."""
+        r"""Fit ``A`` and ``b`` by regression on the pairs already drawn for ``Sigma_Y``.
+
+        Zero marginal cost: no new samples are drawn.
+
+        Parameters
+        ----------
+        u_samples : Float[Array, "n_samples n_obs"]
+            The ``u(eta^{(i)})`` -- the target to denoise.
+        features : Float[Array, "n_samples n_feat"]
+            The denoiser's inputs (``Y`` for ``f``; ``(Y, theta)`` concatenated
+            for ``g``).
+
+        Returns
+        -------
+        AffineDenoiser
+            Fitted denoiser.
+
+        Notes
+        -----
+        ``Cov(features)`` is regularized with a relative jitter
+        (``1e-8 * trace(Cov(features)) / n_feat``): at small ``sigma_obs``
+        and modest sample count, the empirical covariance can be nearly
+        singular.
+        """
         n = u_samples.shape[0]
         u_bar, f_bar = u_samples.mean(0), features.mean(0)
         U, Fc = u_samples - u_bar, features - f_bar
@@ -111,6 +149,13 @@ class ResidualDenoiser(eqx.Module):
 
     ``F`` contains the affines by construction (``net`` initialized to zero),
     so Prop. 3 applies.
+
+    Attributes
+    ----------
+    affine : AffineDenoiser
+        Closed-form affine part, fit once and left frozen during training.
+    net : _MLP
+        Network trained on the residual ``u - affine(features)``.
     """
 
     affine: AffineDenoiser
@@ -130,10 +175,36 @@ class ResidualDenoiser(eqx.Module):
         steps: int = 2000,
         lr: float = 1e-3,
     ) -> "ResidualDenoiser":
-        """Affine in closed form, then ``steps`` Adam steps on the residual.
+        r"""Fit the affine part in closed form, then train the network on its residual.
 
-        No validation or early stopping: the module stays simple, the script
-        decides ``steps``. ``width = 0`` -> ``2 * n_obs``.
+        Parameters
+        ----------
+        u_samples : Float[Array, "n_samples n_obs"]
+            The ``u(eta^{(i)})`` -- the target to denoise.
+        features : Float[Array, "n_samples n_feat"]
+            The denoiser's inputs (``Y`` for ``f``; ``(Y, theta)`` concatenated
+            for ``g``).
+        key : PRNGKeyArray
+            Random key for the network's initialization.
+        width : int, optional
+            Hidden layer width. ``0`` (default) -> ``2 * n_obs``.
+        depth : int, optional
+            Number of layers, by default 3.
+        steps : int, optional
+            Number of Adam optimization steps, by default 2000.
+        lr : float, optional
+            Adam learning rate, by default 1e-3.
+
+        Returns
+        -------
+        ResidualDenoiser
+            Fitted denoiser: frozen affine part plus a network trained to
+            predict ``u - affine(features)``.
+
+        Notes
+        -----
+        No validation or early stopping: the module stays simple, the caller
+        decides ``steps``.
         """
         n_feat, n_obs = features.shape[1], u_samples.shape[1]
         width = width or 2 * n_obs

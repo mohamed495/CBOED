@@ -1,4 +1,4 @@
-r"""Schur complements and their rank-1 updates.
+r"""Compute Schur complements and their rank-1 updates.
 
 Equations (11)-(14) of Theorem 2.1: after selecting design ``W_m``, the four
 diagnostic matrices are conditioned via
@@ -38,7 +38,7 @@ def schur_complement(
     Sigma: Float[Array, "n_obs n_obs"],
     design: Int[Array, " n_sensors"] | None = None,
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma(W_m)`` recomputed from scratch -- equations (11)-(14).
+    r"""Compute ``Sigma(W_m)`` from scratch -- equations (11)-(14).
 
     Cost ``O(p² m + m³)``. This is the **oracle** for :func:`schur_update`:
     an independent numerical path, no recurrence.
@@ -60,6 +60,14 @@ def schur_complement(
     The rows and columns of ``design`` are **exactly zero** in the output (up
     to rounding): conditioning on an observation removes all the information
     it carried. See :func:`schur_gain_diagonal`.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> Sigma = jnp.array([[2.0, 1.0], [1.0, 2.0]])
+    >>> jnp.round(schur_complement(Sigma, jnp.array([0])), 4)
+    Array([[0. , 0. ],
+           [0. , 1.5]], dtype=float64)
     """
     if design is None or design.shape[0] == 0:
         return Sigma
@@ -77,7 +85,7 @@ def schur_update(
     Sigma_cond: Float[Array, "n_obs n_obs"],
     j: Int[Array, ""] | int,
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""Adds sensor ``j`` to a Schur complement -- **rank-1** update.
+    r"""Add sensor ``j`` to a Schur complement -- **rank-1** update.
 
     .. math::
         \Sigma(S \cup \{j\}) = \Sigma(S)
@@ -91,9 +99,10 @@ def schur_update(
     Sigma_cond : Float[Array, "n_obs n_obs"]
         Complement already conditioned by ``S`` (or raw ``Sigma`` if ``S`` is
         empty).
-    j : int
-        Index of the added sensor. **Must not already be in ``S``**: the
-        pivot ``Sigma_cond[j, j]`` would be numerically zero there and the
+    j : int or Int[Array, ""]
+        Index of the added sensor (plain Python ``int`` or 0-d integer
+        array). **Must not already be in ``S``**: the pivot
+        ``Sigma_cond[j, j]`` would be numerically zero there and the
         division would blow up.
 
     Returns
@@ -120,7 +129,7 @@ def schur_gain_diagonal(
     Sigma_den_cond: Float[Array, "n_obs n_obs"],
     selected: Int[Array, " n_sensors"] | None = None,
 ) -> Float[Array, " n_obs"]:
-    r"""Marginal gain of **every** candidate, in one shot.
+    r"""Compute the marginal gain of **every** candidate sensor, in one shot.
 
     For ``W_new = e_j``, the incremental term of Theorem 2.1 reduces to a
     ratio of two diagonal entries:
@@ -170,13 +179,27 @@ def log_ratio(
     Sigma_den: Float[Array, "n_obs n_obs"],
     design: Int[Array, " n_sensors"] | None = None,
 ) -> Float[Array, ""]:
-    r"""``½ ln |W^T A W| / |W^T B W|`` -- generalized Rayleigh quotient, flat computation.
+    r"""Compute ``½ ln |W^T A W| / |W^T B W|`` -- generalized Rayleigh quotient, flat computation.
 
+    Parameters
+    ----------
+    Sigma_num : Float[Array, "n_obs n_obs"]
+        Numerator matrix ``A`` (e.g. ``Sigma_signal`` or ``Sigma_Y``).
+    Sigma_den : Float[Array, "n_obs n_obs"]
+        Denominator matrix ``B`` (e.g. ``Sigma_Y_given_theta`` or ``Sigma_noise``).
+    design : Int[Array, " n_sensors"] | None
+        Selected indices ``W``. ``None`` -> full design ``I_p``, used by the
+        conservative bounds for their reference term.
+
+    Returns
+    -------
+    Float[Array, ""]
+        ``½ ln(|W^T A W| / |W^T B W|)``.
+
+    Notes
+    -----
     Submatrices and ``slogdet``, no Schur complement: a path independent of
     :func:`schur_gain_diagonal` and of ``greedy_schur``, hence their oracle.
-
-    ``design=None`` -> full design ``I_p``, used by the conservative bounds
-    for their reference term.
     """
     if design is None:
         num, den = Sigma_num, Sigma_den

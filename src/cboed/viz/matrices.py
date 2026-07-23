@@ -1,7 +1,7 @@
-r"""Diagnostic matrices and the moments that produce them.
+r"""Plot diagnostic matrices and the moments that produce them.
 
-The central figure is :func:`plot_diagnostics` -- the two pairs from Theorem
-2.1 and their differences.
+The central figure is :func:`plot_diagnostics` -- the two pairs from Thm 2.1
+and their differences.
 
 At ``lambda = 0``: ``Sigma_signal = Sigma_Y`` and ``Sigma_noise =
 Sigma_{Y|theta}``, so both difference panels are empty (Rem. 2.2). This is
@@ -19,6 +19,27 @@ from cboed.viz.style import CMAP_DIFF, CMAP_PSD, symmetric_limits
 
 
 def _imshow(ax, M, title, cmap=CMAP_PSD, vlim=None):
+    """Draw a matrix with `imshow`, hidden ticks, and an attached colorbar.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on.
+    M : array_like, shape (r, c)
+        Matrix to display. Not required to be square (e.g. the Jacobian
+        ``L(u)`` in :func:`plot_moments` is rectangular).
+    title : str
+        Axes title.
+    cmap : str or matplotlib.colors.Colormap, optional
+        Colormap passed to `imshow`. Defaults to ``CMAP_PSD``.
+    vlim : tuple[float, float], optional
+        ``(vmin, vmax)`` passed to `imshow`. Uses matplotlib's default
+        autoscaling if not given.
+
+    Returns
+    -------
+    im : matplotlib.image.AxesImage
+    """
     M = np.asarray(M)
     kw = {} if vlim is None else {"vmin": vlim[0], "vmax": vlim[1]}
     im = ax.imshow(M, cmap=cmap, **kw)
@@ -31,14 +52,35 @@ def _imshow(ax, M, title, cmap=CMAP_PSD, vlim=None):
 
 
 def plot_diagnostics(diagnostics, title=""):
-    """The two pairs from Thm 2.1 and their differences.
+    """Plot the two matrix pairs from Thm 2.1 and their differences.
 
     Row 1: ``Sigma_Y``, ``Sigma_signal``, their difference -- the numerator.
     Row 2: ``Sigma_{Y|theta}``, ``Sigma_noise``, their difference -- the
     denominator.
 
+    Parameters
+    ----------
+    diagnostics : object
+        Must expose the attributes ``Sigma_Y``, ``Sigma_signal``,
+        ``Sigma_Y_given_theta``, and ``Sigma_noise`` as arrays of matching
+        shape ``(q, q)``.
+    title : str, optional
+        Figure suptitle.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Notes
+    -----
     Each pair shares its color scale: without that, two close matrices would
     look different simply because their extrema are.
+
+    At ``lambda = 0``: ``Sigma_signal = Sigma_Y`` and ``Sigma_noise =
+    Sigma_{Y|theta}``, so both difference panels are empty (Rem. 2.2). This
+    is the **validation figure**: if they are not empty in the linear case,
+    something is wrong. At ``lambda != 0``, the structure that appears in the
+    differences **is** the gap.
     """
     d = diagnostics
     pairs = [
@@ -69,13 +111,28 @@ def plot_diagnostics(diagnostics, title=""):
 
 
 def plot_moments(L, H, I_eta, J_h=None, title=""):
-    """The ingredients of Prop. 4.
+    """Plot the matrix ingredients of Prop. 4.
 
-    ``L(u)`` -- mean jacobian, ``(q, p)``.
-    ``H(u)`` -- covariance of the jacobians, ``(q, q)``. **Zero if u is linear.**
-    ``I_eta`` -- prior precision, ``(q, q)``.
-    ``J(h)`` -- QoI term, ``(q, q)``. The only difference between signal and noise.
+    Parameters
+    ----------
+    L : array_like, shape (q, p)
+        ``L(u)`` -- mean Jacobian.
+    H : array_like, shape (q, q)
+        ``H(u)`` -- covariance of the Jacobians. Zero if ``u`` is linear.
+    I_eta : array_like, shape (q, q)
+        ``I_eta = Gamma_prior^{-1}`` -- prior precision.
+    J_h : array_like, shape (q, q), optional
+        ``J(h)`` -- QoI term, the only difference between signal and noise.
+        Omitted if not applicable.
+    title : str, optional
+        Figure suptitle.
 
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Notes
+    -----
     ``H(u)`` is the only matrix that distinguishes Prop. 4 from a
     linear-Gaussian computation: seeing it empty at ``lambda=0`` and full at
     ``lambda>0`` validates that branch.
@@ -99,16 +156,30 @@ def plot_moments(L, H, I_eta, J_h=None, title=""):
 
 
 def plot_matrix_comparison(mats, labels, reference=0, title=""):
-    """Several estimates of the **same** matrix, and their deviations from a
-    reference.
+    """Plot several estimates of the same matrix and their deviations from a reference.
+
+    Row 1: each matrix, on a shared color scale. Row 2: each matrix's
+    deviation from the reference (the reference panel itself is left blank),
+    on a shared, zero-centered diverging color scale.
 
     Used to compare standard and goal-oriented in the linear case, or two
     routes to ``Sigma_signal`` (gradient §3.3 versus approximation §3.2).
 
     Parameters
     ----------
-    reference : int
-        Index of the matrix used as the reference for the deviations.
+    mats : sequence of array_like
+        The matrices to compare, all of the same shape ``(q, q)``.
+    labels : sequence of str
+        One label per matrix in `mats`.
+    reference : int, optional
+        Index into `mats`/`labels` of the matrix used as the reference for
+        the deviations.
+    title : str, optional
+        Figure suptitle.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
     """
     n = len(mats)
     ref = np.asarray(mats[reference])
@@ -134,8 +205,24 @@ def plot_matrix_comparison(mats, labels, reference=0, title=""):
 
 
 def plot_spectrum_comparison(mats, labels, title=""):
-    """Overlaid spectra, log scale.
+    """Plot overlaid eigenvalue spectra of several matrices, log scale.
 
+    Parameters
+    ----------
+    mats : sequence of array_like
+        Matrices to compare, each of shape ``(q, q)``; each is symmetrized
+        (``0.5 * (M + M.T)``) before its eigenvalues are computed.
+    labels : sequence of str
+        One label per matrix in `mats`.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Notes
+    -----
     Two matrices can look visually similar and have very different spectra
     -- it is the spectrum that drives the log-dets, and thus the bounds.
     """

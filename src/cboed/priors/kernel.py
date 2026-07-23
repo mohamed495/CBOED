@@ -1,5 +1,5 @@
 # src/cboed/priors/kernel.py
-"""Stationary covariance kernels for Gaussian priors.
+"""Implement stationary covariance kernels for Gaussian priors.
 
 All kernels inherit from :class:`KernelBase`, which carries ``length_scale``,
 ``sigma``, their validation, and ``_pairwise_distance``. A kernel with no
@@ -14,7 +14,7 @@ from cboed.priors.base import KernelBase
 
 
 class Gaussian(KernelBase):
-    r"""Gaussian kernel (RBF, squared exponential).
+    r"""Implement the Gaussian kernel (RBF, squared exponential).
 
     .. math::
         k(x, x') = \sigma^2 \exp\left(-\frac{|x - x'|^2}{2\ell^2}\right)
@@ -43,7 +43,7 @@ class Gaussian(KernelBase):
 
 
 class Matern12(KernelBase):
-    r"""Matern kernel :math:`\nu = 1/2` (exponential, Ornstein-Uhlenbeck).
+    r"""Implement the Matern kernel :math:`\nu = 1/2` (exponential, Ornstein-Uhlenbeck).
 
     .. math::
         k(x, x') = \sigma^2 \exp\left(-\frac{|x - x'|}{\ell}\right)
@@ -70,7 +70,7 @@ class Matern12(KernelBase):
 
 
 class Matern32(KernelBase):
-    r"""Matern kernel :math:`\nu = 3/2`.
+    r"""Implement the Matern kernel :math:`\nu = 3/2`.
 
     .. math::
         k(x, x') = \sigma^2 \left(1 + \frac{\sqrt{3}\,r}{\ell}\right)
@@ -99,7 +99,7 @@ class Matern32(KernelBase):
 
 
 class Matern52(KernelBase):
-    r"""Matern kernel :math:`\nu = 5/2`.
+    r"""Implement the Matern kernel :math:`\nu = 5/2`.
 
     .. math::
         k(x, x') = \sigma^2 \left(1 + \frac{\sqrt{5}\,r}{\ell}
@@ -129,7 +129,7 @@ class Matern52(KernelBase):
 
 
 class RationalQuadratic(KernelBase):
-    r"""Rational quadratic kernel -- continuous mixture of RBF kernels.
+    r"""Implement the rational quadratic kernel -- a continuous mixture of RBF kernels.
 
     .. math::
         k(x, x') = \sigma^2 \left(1 + \frac{|x - x'|^2}
@@ -171,7 +171,7 @@ class RationalQuadratic(KernelBase):
 
 
 class Periodic(KernelBase):
-    r"""Periodic kernel (exp-sine-squared).
+    r"""Implement the periodic kernel (exp-sine-squared).
 
     .. math::
         k(x, x') = \sigma^2 \exp\left(-\frac{2}{\ell^2}

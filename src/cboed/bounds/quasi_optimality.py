@@ -1,4 +1,4 @@
-r"""Quasi-optimality -- Proposition 1.
+r"""Analyze the quasi-optimality of the greedy designs -- Prop. 1.
 
 The gap is not an opaque scalar: it is a **sum of generalized log-eigenvalues**,
 and its distribution decides which of the two strategies is usable.
@@ -32,7 +32,7 @@ contributions
 .. math::
     t_i = \frac{\ln\alpha_i+\ln\beta_i}{2}.
 
-The constants of Proposition 1 are simply partial sums of these
+The constants of Prop. 1 are simply partial sums of these
 contributions:
 
 * incremental: ``\sum_{i=1}^{m} t_i``;
@@ -64,7 +64,17 @@ from cboed.bounds.base import DiagnosticMatrices
 @jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class QuasiOptimality:
-    """The spectrum of the gap and what it costs."""
+    """The spectrum of the gap and what it costs -- Prop. 1.
+
+    Attributes
+    ----------
+    alpha : Float[Array, " n_obs"]
+        Eigenvalues of ``(Sigma_Y, Sigma_signal)``, **decreasing**, ``>= 1``.
+    beta : Float[Array, " n_obs"]
+        Eigenvalues of ``(Sigma_Y_given_theta, Sigma_noise)``, decreasing,
+        ``>= 1``. Identically 1 in the standard setting: both matrices equal
+        ``Sigma_obs`` there.
+    """
 
     alpha: Float[Array, " n_obs"]
     """Eigenvalues of ``(Sigma_Y, Sigma_signal)``, **decreasing**. ``>= 1``."""
@@ -77,7 +87,7 @@ class QuasiOptimality:
     """
 
     def suboptimality(self, n_sensors: int, strategy: str = "incremental") -> float:
-        """Bound on ``max_W EIG(W) - EIG(W_greedy)`` -- eq. (22)/(23).
+        """Compute the bound on ``max_W EIG(W) - EIG(W_greedy)`` -- eq. (22)/(23).
 
         Parameters
         ----------
@@ -85,7 +95,19 @@ class QuasiOptimality:
             Budget ``m``.
         strategy : {"incremental", "conservative"}
             Incremental: sum of the **first** ``m`` (the largest).
-            Conservative: sum of the **last** ``d - m``.
+            Conservative: sum of the **first** ``d - m``.
+
+        Returns
+        -------
+        float
+            The suboptimality constant: an upper bound on
+            ``max_W EIG(W) - EIG(W_greedy)`` for the chosen strategy at
+            budget ``m = n_sensors``.
+
+        Raises
+        ------
+        ValueError
+            If ``strategy`` is neither ``"incremental"`` nor ``"conservative"``.
 
         Notes
         -----
@@ -102,12 +124,19 @@ class QuasiOptimality:
         raise ValueError(f"strategy must be incremental|conservative, got {strategy}")
 
     def crossover(self) -> int:
-        """First budget at which the conservative bound becomes tighter.
+        """Find the first budget at which the conservative bound becomes tighter.
 
         The constants in equations (22) and (23) are monotone in opposite
         directions. This method returns the first ``m`` for which the
         conservative bound is smaller than the incremental bound; if that
         never happens, it returns ``p``.
+
+        Returns
+        -------
+        int
+            First budget ``m`` in ``[1, p)`` with
+            ``suboptimality(m, "conservative") < suboptimality(m, "incremental")``,
+            or ``p = n_obs`` if no such ``m`` exists.
         """
         p = self.alpha.shape[0]
         gaps = [
@@ -119,8 +148,15 @@ class QuasiOptimality:
 
     @property
     def total_gap(self) -> float:
-        """``gap(I_p) = ½ sum (ln alpha_i + ln beta_i)``.
+        """Compute ``gap(I_p) = ½ sum (ln alpha_i + ln beta_i)``, the gap at the full design.
 
+        Returns
+        -------
+        float
+            Total spectral gap.
+
+        Notes
+        -----
         Oracle: must equal ``incremental_bounds(diagnostics, None).gap``,
         computed via ``slogdet`` calls that diagonalize nothing.
         """
@@ -128,8 +164,17 @@ class QuasiOptimality:
 
     @property
     def effective_rank(self) -> int:
-        """Minimal number of spectral contributions explaining 90% of the total gap.
+        """Compute the minimal number of spectral contributions explaining 90% of the total gap.
 
+        Returns
+        -------
+        int
+            Smallest ``k`` such that the ``k`` largest spectral contributions
+            ``t_i = (ln alpha_i + ln beta_i) / 2`` sum to at least 90% of
+            :attr:`total_gap`; ``0`` if the total gap is non-positive.
+
+        Notes
+        -----
         This is a spectral concentration indicator: a low value means the
         gap is dominated by a small number of modes.
         """
@@ -146,8 +191,22 @@ def generalized_eigenvalues(
     A: Float[Array, "n_obs n_obs"],
     B: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, " n_obs"]:
-    r"""Eigenvalues of ``A u = alpha B u``, decreasing. ``B`` SDP.
+    r"""Compute the eigenvalues of the generalized problem ``A u = alpha B u``.
 
+    Parameters
+    ----------
+    A : Float[Array, "n_obs n_obs"]
+        Symmetric matrix.
+    B : Float[Array, "n_obs n_obs"]
+        Symmetric positive-definite matrix.
+
+    Returns
+    -------
+    Float[Array, " n_obs"]
+        Generalized eigenvalues ``alpha_i``, **decreasing**.
+
+    Notes
+    -----
     Via Cholesky of ``B`` then ``eigvalsh`` of ``L^{-1} A L^{-T}``: JAX has no
     generalized ``eigh``, and forming ``B^{-1}A`` would destroy both the
     symmetry **and** the conditioning.
@@ -162,7 +221,19 @@ def generalized_eigenvalues(
 @jax.jit
 @jaxtyped(typechecker=beartype)
 def quasi_optimality(diagnostics: DiagnosticMatrices) -> QuasiOptimality:
-    """The spectrum of the gap -- Prop. 1.
+    """Compute the spectrum of the gap -- Prop. 1.
+
+    Parameters
+    ----------
+    diagnostics : DiagnosticMatrices
+        The four diagnostic matrices ``Sigma_Y``, ``Sigma_Y_given_theta``,
+        ``Sigma_signal``, ``Sigma_noise``.
+
+    Returns
+    -------
+    QuasiOptimality
+        The generalized eigenvalues ``alpha`` of ``(Sigma_Y, Sigma_signal)``
+        and ``beta`` of ``(Sigma_Y_given_theta, Sigma_noise)``.
 
     Notes
     -----

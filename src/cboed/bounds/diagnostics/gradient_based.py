@@ -1,4 +1,4 @@
-r"""Gradient-based diagnostic matrices -- Proposition 4, §3.3.
+r"""Compute gradient-based diagnostic matrices -- Prop. 4, §3.3.
 
 The module separates **the moments** (the expensive part: `N` Jacobians of
 the forward model) from **the assembly** (linear algebra on `q x q`
@@ -35,8 +35,21 @@ from cboed.priors.base import Prior
 @jax.jit
 @jaxtyped(typechecker=beartype)
 def psd_sqrt(A: Float[Array, "n n"]) -> Float[Array, "n n"]:
-    """PSD square root via ``eigh``, eigenvalues clipped to zero.
+    r"""Compute a PSD square root of ``A`` via ``eigh``, eigenvalues clipped to zero.
 
+    Parameters
+    ----------
+    A : Float[Array, "n n"]
+        Symmetric PSD (or nearly so) matrix.
+
+    Returns
+    -------
+    Float[Array, "n n"]
+        ``P`` such that ``P @ P.T ~ A``, with negative eigenvalues (rounding
+        noise) clipped to zero.
+
+    Notes
+    -----
     Not ``cholesky``: the matrices involved can be singular (degenerate
     posterior covariance, ``Sigma_xi = 0``), and LAPACK returns ``nan`` there.
     """
@@ -49,7 +62,7 @@ def _expected_quadratic(
     Jacs: Float[Array, "n_samples a b"],
     chol: tuple[Float[Array, "a a"], bool],
 ) -> Float[Array, "b b"]:
-    """``E[J^T M^{-1} J]`` over the sample, ``M`` given by its factorization."""
+    """Compute ``E[J^T M^{-1} J]`` over the sample, ``M`` given by its Cholesky factorization."""
 
     def quad(J: Float[Array, "a b"]) -> Float[Array, "b b"]:
         return J.T @ jsp.linalg.cho_solve(chol, J)
@@ -70,15 +83,23 @@ def expected_jacobian_moments(
     etas: Float[Array, "n_samples n_eta"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> tuple[Float[Array, "n_eta n_obs"], Float[Array, "n_eta n_eta"]]:
-    r"""``(L(u), H(u))`` -- equations (31)-(32).
+    r"""Compute the moments ``(L(u), H(u))`` -- equations (31)-(32).
 
     Parameters
     ----------
     u : Callable
         Forward model ``eta -> observations``, without a design.
     etas : Float[Array, "n_samples n_eta"]
-        Draws from the prior.
+        Draws from the prior on ``eta``.
     Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+
+    Returns
+    -------
+    L : Float[Array, "n_eta n_obs"]
+        ``L(u) = E[Jac u(eta)]^T``.
+    H : Float[Array, "n_eta n_eta"]
+        ``H(u) = E[(Jac u - E[Jac u])^T Sigma_obs^{-1} (Jac u - E[Jac u])]``.
 
     Notes
     -----
@@ -103,10 +124,27 @@ def qoi_fisher_moment(
     etas: Float[Array, "n_samples n_eta"],
     Sigma_xi: Float[Array, "n_param n_param"],
 ) -> Float[Array, "n_eta n_eta"]:
-    r"""``J(h) = E[Jac h^T Sigma_xi^{-1} Jac h]`` -- equation (33).
+    r"""Compute the QoI Fisher moment ``J(h) = E[Jac h^T Sigma_xi^{-1} Jac h]`` -- equation (33).
 
     Cheap: ``h`` is explicit, no forward model to evaluate.
 
+    Parameters
+    ----------
+    h : Callable
+        QoI map ``eta -> theta``.
+    etas : Float[Array, "n_samples n_eta"]
+        Draws from the prior on ``eta``.
+    Sigma_xi : Float[Array, "n_param n_param"]
+        Covariance of the QoI noise ``xi``. Must be strictly positive
+        definite: see Notes.
+
+    Returns
+    -------
+    Float[Array, "n_eta n_eta"]
+        ``J(h)``.
+
+    Notes
+    -----
     ``Sigma_xi`` must be strictly positive definite. As ``Sigma_xi -> 0``,
     ``J(h) -> inf``: the case ``xi = 0`` is not reachable here, it belongs to
     :func:`gradient_diagnostics_standard`.
@@ -119,8 +157,20 @@ def qoi_fisher_moment(
 @partial(jax.jit, static_argnums=(0,))
 @jaxtyped(typechecker=beartype)
 def fisher_information_prior(prior_eta: Prior) -> Float[Array, "n_eta n_eta"]:
-    r"""``I_eta = Cov(grad log pi(eta))`` -- equation (34), Gaussian case.
+    r"""Compute ``I_eta = Cov(grad log pi(eta))`` -- equation (34), Gaussian case.
 
+    Parameters
+    ----------
+    prior_eta : Prior
+        Prior on ``eta``, assumed Gaussian with precision ``Gamma^{-1}``.
+
+    Returns
+    -------
+    Float[Array, "n_eta n_eta"]
+        ``I_eta = Gamma^{-1}``.
+
+    Notes
+    -----
     For a Gaussian prior, ``grad log pi = -Gamma^{-1}(eta - m)``, hence
     ``Cov(grad log pi) = Gamma^{-1} Gamma Gamma^{-1} = Gamma^{-1}``. Exact, no
     sampling needed.
@@ -136,8 +186,25 @@ def fisher_information_prior(prior_eta: Prior) -> Float[Array, "n_eta n_eta"]:
 def fisher_information_prior_mc(
     prior_eta: Prior, key: PRNGKeyArray, n_samples: int
 ) -> Float[Array, "n_eta n_eta"]:
-    """``I_eta`` via the empirical covariance of the scores. Valid for any prior.
+    """Compute ``I_eta`` via the empirical covariance of the scores. Valid for any prior.
 
+    Parameters
+    ----------
+    prior_eta : Prior
+        Prior on ``eta``.
+    key : PRNGKeyArray
+        Random key for sampling.
+    n_samples : int
+        Number of Monte Carlo samples.
+
+    Returns
+    -------
+    Float[Array, "n_eta n_eta"]
+        Empirical covariance of ``grad log pi(eta)`` over ``n_samples`` draws
+        from the prior, symmetrized.
+
+    Notes
+    -----
     Oracle of :func:`fisher_information_prior`: their agreement proves that
     the Gaussian assumption holds.
     """
@@ -159,10 +226,25 @@ def assemble(
     A: Float[Array, "n_eta n_eta"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma_obs + L^T A^{-1} L``, via ``cho_solve``. ``A`` SDP.
+    r"""Assemble ``Sigma_obs + L^T A^{-1} L`` via ``cho_solve`` -- equations (35)-(36).
 
     Common form for (35) and (36): only ``A`` changes.
     ``A = H + I_eta`` -> ``Sigma_signal``. ``A = H + I_eta + J(h)`` -> ``Sigma_noise``.
+
+    Parameters
+    ----------
+    L : Float[Array, "n_eta n_obs"]
+        ``L(u)`` from :func:`expected_jacobian_moments`.
+    A : Float[Array, "n_eta n_eta"]
+        SDP matrix to invert against: ``H + I_eta`` (signal) or
+        ``H + I_eta + J(h)`` (noise).
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma_obs + L^T A^{-1} L``, symmetrized.
     """
     chol = jsp.linalg.cho_factor(A, lower=True)
     out = Sigma_obs + L.T @ jsp.linalg.cho_solve(chol, L)
@@ -178,7 +260,11 @@ def assemble_misfit(
     Sigma_obs: Float[Array, "n_obs n_obs"],
     extra: Float[Array, "n_eta n_eta"] | None = None,
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""Same, **preconditioned by the prior** -- without forming ``Sigma_eta^{-1}``.
+    r"""Assemble ``Sigma_obs + L^T A^{-1} L``, **preconditioned by the prior**.
+
+    Computes the same quantity as :func:`assemble` with
+    ``A = H + Sigma_eta^{-1}`` (+ ``extra``), but without ever forming
+    ``Sigma_eta^{-1}``:
 
     .. math::
         (H + \Sigma_\eta^{-1})^{-1}
@@ -189,11 +275,25 @@ def assemble_misfit(
 
     Parameters
     ----------
+    L : Float[Array, "n_eta n_obs"]
+        ``L(u)`` from :func:`expected_jacobian_moments`.
+    H : Float[Array, "n_eta n_eta"]
+        ``H(u)`` from :func:`expected_jacobian_moments`.
+    Sigma_eta : Float[Array, "n_eta n_eta"]
+        Prior covariance of ``eta`` (``I_eta = Sigma_eta^{-1}`` in the
+        Gaussian case).
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
     extra : Float[Array, "n_eta n_eta"] | None
         Additional term in ``A`` (``J(h)`` for ``Sigma_noise``). The
         preconditioning identity only applies to ``Sigma_eta^{-1}``: ``extra``
         is therefore absorbed into the Hessian, ``H + extra`` playing the role
         of ``H``.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma_obs + L^T A^{-1} L``, symmetrized.
 
     Notes
     -----
@@ -229,12 +329,40 @@ def gradient_diagnostics(
     key: PRNGKeyArray,
     n_samples: int,
 ) -> tuple[Float[Array, "n_obs n_obs"], Float[Array, "n_obs n_obs"]]:
-    r"""``(Sigma_signal, Sigma_noise)`` in the goal-oriented setting -- Prop. 4.
+    r"""Compute ``(Sigma_signal, Sigma_noise)`` in the goal-oriented setting -- Prop. 4.
 
-    Satisfy ``Sigma_signal^{-1} ⪰ I_Y`` and ``Sigma_noise^{-1} ⪰ E[I_{Y|theta}]``.
+    Satisfy ``Sigma_signal^{-1} ⪰ I_Y`` and ``Sigma_noise^{-1} ⪰ E[I_{Y|theta}]``,
+    the certified Loewner order required by Theorem 2.1.
 
-    Returns **two of the four** matrices: ``Sigma_Y`` and
-    ``Sigma_Y_given_theta`` come from §3.1, with no alternative.
+    Parameters
+    ----------
+    u : Callable
+        Forward model ``eta -> observations``, without a design.
+    h : Callable
+        QoI map ``eta -> theta``.
+    prior_eta : Prior
+        Prior on ``eta``.
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+    Sigma_xi : Float[Array, "n_param n_param"]
+        Covariance of the QoI noise ``xi``.
+    key : PRNGKeyArray
+        Random key for sampling ``eta``.
+    n_samples : int
+        Number of Monte Carlo samples for the moments.
+
+    Returns
+    -------
+    Sigma_signal : Float[Array, "n_obs n_obs"]
+        ``Sigma_obs + L^T (H + I_eta)^{-1} L``.
+    Sigma_noise : Float[Array, "n_obs n_obs"]
+        ``Sigma_obs + L^T (H + I_eta + J(h))^{-1} L``.
+
+    Notes
+    -----
+    Returns **two of the four** diagnostic matrices: ``Sigma_Y`` and
+    ``Sigma_Y_given_theta`` come from §3.1 (:mod:`cboed.bounds.diagnostics.sample_based`),
+    with no alternative.
     """
     etas = prior_eta.sample(key, n_samples)
     L, H = expected_jacobian_moments(u, etas, Sigma_obs)
@@ -252,8 +380,30 @@ def gradient_diagnostics_standard(
     key: PRNGKeyArray,
     n_samples: int,
 ) -> tuple[Float[Array, "n_obs n_obs"], Float[Array, "n_obs n_obs"]]:
-    r"""``(Sigma_signal, Sigma_noise)`` in the standard setting ``Y = u(theta) + eps``.
+    r"""Compute ``(Sigma_signal, Sigma_noise)`` in the standard setting ``Y = u(theta) + eps``.
 
+    Parameters
+    ----------
+    u : Callable
+        Forward model ``theta -> observations``, without a design.
+    prior_theta : Prior
+        Prior on ``theta``.
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+    key : PRNGKeyArray
+        Random key for sampling ``theta``.
+    n_samples : int
+        Number of Monte Carlo samples for the moments.
+
+    Returns
+    -------
+    Sigma_signal : Float[Array, "n_obs n_obs"]
+        ``Sigma_obs + L^T (H + I_theta)^{-1} L``.
+    Sigma_noise : Float[Array, "n_obs n_obs"]
+        ``Sigma_obs``, exactly (see Notes).
+
+    Notes
+    -----
     Prop. 2 gives ``E[I_{Y|theta}] = Sigma_obs^{-1}``, hence
     ``Sigma_noise = Sigma_obs`` **exactly** -- posited, not computed.
 

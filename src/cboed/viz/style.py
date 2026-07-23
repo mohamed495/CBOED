@@ -1,4 +1,4 @@
-r"""Shared style.
+r"""Set up the shared plotting style: palette, colormaps, rcParams, and small helpers.
 
 ``viz`` module rule: functions take **arrays** and return ``Figure`` objects. No
 computation, no disk reads, no direct model calls. Scripts compute (with caching)
@@ -49,13 +49,35 @@ RC = {
 
 
 def use_style() -> None:
-    """Apply ``RC``. Call once per script."""
+    """Apply the shared rcParams (``RC``) to matplotlib.
+
+    Notes
+    -----
+    Call once per script, before any figure is created.
+    """
     plt.rcParams.update(RC)
 
 
 def save(fig, path: str | Path) -> Path:
-    """Save and close. Close explicitly: otherwise matplotlib keeps every
-    figure in memory, and a sweep produces dozens of them.
+    """Save a figure to disk and close it.
+
+    Parameters
+    ----------
+    fig : matplotlib.figure.Figure
+        Figure to save.
+    path : str or Path
+        Destination path. Parent directories are created if missing.
+
+    Returns
+    -------
+    path : Path
+        The destination path, as a `Path`.
+
+    Notes
+    -----
+    The figure is closed explicitly after saving: otherwise matplotlib keeps
+    every figure in memory, and a sweep over many configurations produces
+    dozens of them.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,10 +87,24 @@ def save(fig, path: str | Path) -> Path:
 
 
 def symmetric_limits(*arrays) -> tuple[float, float]:
-    """``(-v, v)`` with ``v = max|.|`` -- for a zero-centered diverging colormap.
+    """Compute symmetric color limits ``(-v, v)`` with ``v = max|.|``.
 
-    Without this, ``RdBu_r`` places white at the mean rather than at zero: a
-    difference that is everywhere positive would appear to change sign.
+    Parameters
+    ----------
+    *arrays : array_like
+        One or more arrays; the limits use the maximum absolute value across
+        all of them.
+
+    Returns
+    -------
+    vmin, vmax : float
+        ``(-v, v)``, suitable for a zero-centered diverging colormap.
+
+    Notes
+    -----
+    Without this, a diverging colormap such as ``RdBu_r`` places white at the
+    mean of the data rather than at zero: a difference that is everywhere
+    positive would then appear to change sign.
     """
     v = max(float(abs(a).max()) for a in arrays)
     return -v, v

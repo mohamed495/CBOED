@@ -1,4 +1,4 @@
-r"""Fields: prior samples, posterior samples, reconstruction.
+r"""Plot fields: prior samples, posterior samples, reconstruction, contraction.
 
 The functions take already-computed arrays. No model calls.
 """
@@ -11,12 +11,23 @@ from cboed.viz.style import COLORS
 
 
 def _mark_sensors_rug(ax, x, sensors, height_frac=0.045):
-    """Short ticks anchored at the bottom of the axis -- one per sensor.
+    """Draw short tick marks at the bottom of the axis, one per sensor.
 
     Unlike a full-height ``axvline``, these never cross the plotted
     trajectories: they sit in a thin band at the current bottom of the axis,
-    sized as a fraction of the y-range so the mark stays visible regardless
-    of scale.
+    sized as a fraction of the y-range (`height_frac`) so the mark stays
+    visible regardless of scale.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on.
+    x : array_like, shape (n,)
+        Spatial grid.
+    sensors : array_like, shape (m,)
+        Indices into `x` of the sensors to mark.
+    height_frac : float, optional
+        Tick height as a fraction of the current y-range.
     """
     ymin, ymax = ax.get_ylim()
     tick_h = height_frac * (ymax - ymin)
@@ -44,21 +55,36 @@ def plot_field_samples(
     label="prior",
     n_show=20,
 ):
-    """Trajectories + ``±2 sigma`` envelope.
+    """Plot sample trajectories with a ``mean ± 2 sigma`` envelope.
 
     Parameters
     ----------
-    x : (n,)
+    x : array_like, shape (n,)
         Spatial grid.
-    samples : (n_samples, n)
-        Realizations. Only ``n_show`` are plotted; the envelope uses all of
-        them.
-    mean, std : (n,) or None
-        If ``None``, computed from ``samples``.
-    truth : (n,) or None
-        ``theta_true``, overlaid.
-    sensors : (m,) or None
-        Indices of the selected sensors, marked on the axis.
+    samples : array_like, shape (n_samples, n)
+        Realizations. Only `n_show` of them are plotted individually; the
+        ``mean``/``std`` envelope is computed from all of them.
+    mean, std : array_like, shape (n,), optional
+        Mean and standard deviation of the field. Computed from `samples` if
+        not given.
+    truth : array_like, shape (n,), optional
+        ``theta_true``, overlaid as a dashed line.
+    sensors : array_like, shape (m,), optional
+        Indices into `x` of the selected sensors, marked on the axis as a
+        rug of ticks (see :func:`_mark_sensors_rug`).
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw on. A new figure is created if not given.
+    color : str, optional
+        Key into ``COLORS`` used for the samples, mean, and envelope.
+    label : str, optional
+        Legend label prefix (e.g. ``"prior"`` or ``"posterior"``).
+    n_show : int, optional
+        Number of individual realizations plotted.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The parent figure of `ax`.
     """
     ax = ax or plt.subplots(figsize=(7, 3.2))[1]
     samples = np.asarray(samples)
@@ -94,21 +120,51 @@ def plot_reconstruction(
     n_show=30,
     qoi_span=None,
 ):
-    """Prior, posterior, and ``theta_true`` overlaid on a single plot.
+    """Plot prior, posterior, and ``theta_true`` realizations overlaid on one axes.
+
+    Also draws the posterior mean (``posterior_samples.mean(axis=0)``) as a
+    solid line in the posterior color, on top of the (thin, semi-transparent)
+    individual posterior realizations, so the central estimate is visible at
+    a glance alongside the spread and ``theta_true``.
 
     Parameters
     ----------
-    laplace_warning : bool
+    x : array_like, shape (n,)
+        Spatial grid.
+    prior_samples : array_like, shape (n_samples, n)
+        Prior realizations. Only `n_show` are plotted.
+    posterior_samples : array_like, shape (n_samples, n)
+        Posterior realizations. Only `n_show` are plotted individually; all
+        of them are used to compute the posterior mean curve.
+    truth : array_like, shape (n,)
+        ``theta_true``, overlaid as a solid line.
+    sensors : array_like, shape (m,), optional
+        Indices into `x` of the selected sensors, marked on the axis as a
+        rug of ticks (see :func:`_mark_sensors_rug`).
+    laplace_warning : bool, optional
         If ``True``, annotate that the posterior is the Laplace
         approximation linearized at ``mu_prior`` -- exact only if the model
         is linear, and increasingly wrong the farther ``theta_true`` is from
         the linearization point.
-    n_show : int
+    n_show : int, optional
         Number of realizations plotted per cloud (prior, posterior).
-    qoi_span : tuple[float, float] or None
+    qoi_span : tuple[float, float], optional
         ``(x_min, x_max)`` of the goal-oriented region of interest, shaded in
         the background. Affects only the display: the plotted field remains
         the full field.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> x = np.linspace(0, 1, 50)
+    >>> prior = np.random.randn(10, 50)
+    >>> posterior = 0.3 * np.random.randn(10, 50)
+    >>> truth = np.sin(2 * np.pi * x)
+    >>> fig = plot_reconstruction(x, prior, posterior, truth)
     """
     prior_samples = np.asarray(prior_samples)
     posterior_samples = np.asarray(posterior_samples)
@@ -122,11 +178,14 @@ def plot_reconstruction(
         ax.plot(x, s, color=COLORS["prior"], alpha=0.25, lw=0.7)
     for s in posterior_samples[:n_show]:
         ax.plot(x, s, color=COLORS["posterior"], alpha=0.35, lw=0.7)
-    ax.plot(x, np.asarray(truth), color=COLORS["truth"], lw=2.2)
+    posterior_mean = posterior_samples.mean(axis=0)
+    ax.plot(x, posterior_mean, color=COLORS["posterior"], lw=2.0, zorder=3)
+    ax.plot(x, np.asarray(truth), color=COLORS["truth"], lw=2.2, zorder=4)
 
     handles = [
         Line2D([0], [0], color=COLORS["prior"], lw=1.5, label="prior (realizations)"),
         Line2D([0], [0], color=COLORS["posterior"], lw=1.5, label="posterior (realizations)"),
+        Line2D([0], [0], color=COLORS["posterior"], lw=2.0, label="posterior mean"),
         Line2D([0], [0], color=COLORS["truth"], lw=2.0, label=r"$\theta_{\rm true}$"),
     ]
     if qoi_span is not None:
@@ -157,10 +216,29 @@ def plot_reconstruction(
 
 
 def plot_contraction(x, prior_std, posterior_std, sensors=None):
-    """``sigma_post / sigma_prior`` -- where the design actually informs.
+    r"""Plot the local contraction ratio ``sigma_post / sigma_prior``.
 
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Spatial grid.
+    prior_std, posterior_std : array_like, shape (n,)
+        Prior and posterior standard deviation fields.
+    sensors : array_like, shape (m,), optional
+        Indices into `x` of the selected sensors, marked directly on the
+        contraction curve.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Notes
+    -----
     More legible than two overlaid envelopes: the contraction is local, and
-    it is what distinguishes two designs of the same budget.
+    it is what distinguishes two designs of the same budget. Sensors are
+    anchored directly on the curve rather than as a separate vertical mark:
+    the dot already sits at the local contraction value, so it doubles as
+    "how much this sensor actually helped" -- no extra visual layer.
     """
     fig, ax = plt.subplots(figsize=(7, 2.8))
     x = np.asarray(x)
@@ -197,19 +275,27 @@ def plot_contraction_spectrum(
     Gamma_post,
     title="",
 ):
-    """Generalized contraction spectrum.
+    """Plot the generalized contraction spectrum, log scale.
 
-    Eigenvalues of:
+    Computes and plots the eigenvalues of
+    ``C = Gamma_prior^{-1/2} Gamma_post Gamma_prior^{-1/2}``, sorted in
+    decreasing order.
 
-        C = Gamma_prior^{-1/2}
-            Gamma_post
-            Gamma_prior^{-1/2}
+    Parameters
+    ----------
+    Gamma_prior, Gamma_post : array_like, shape (q, q)
+        Prior and posterior covariance matrices.
+    title : str, optional
+        Axes title.
 
-    Values close to 1:
-        no information gained.
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
 
-    Values close to 0:
-        strong uncertainty reduction.
+    Notes
+    -----
+    Values close to 1 mean no information was gained along that mode; values
+    close to 0 mean a strong uncertainty reduction.
     """
 
     Gamma_prior = np.asarray(Gamma_prior)

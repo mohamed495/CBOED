@@ -1,4 +1,4 @@
-r"""Quasi-optimality -- Proposition 1.
+r"""Plot the generalized spectrum and sub-optimality constants of Proposition 1.
 
 The identity that structures everything:
 
@@ -7,9 +7,11 @@ The identity that structures everything:
 
 The sub-optimality constants use this same spectrum but read it in two
 different ways:
-- the incremental one controls the modes not yet selected;
-- the conservative one uses a sum over the first d-m modes in order to
-  provide a bound independent of the choice of sensors.
+- the incremental one sums the first ``m`` modes, so the guarantee
+  loosens as the budget grows;
+- the conservative one sums the first ``d-m`` modes, so the guarantee
+  tightens as the budget grows, giving a bound independent of the choice
+  of sensors.
 """
 
 import matplotlib.pyplot as plt
@@ -20,11 +22,32 @@ from cboed.viz.style import COLORS
 
 
 def plot_alpha_spectrum(alpha, beta=None, effective_rank=None, ax=None, title=""):
-    """Generalized spectrum, log scale.
+    """Plot the generalized spectrum ``alpha_i`` (and optionally ``beta_i``), log scale.
 
-    ``alpha_i, beta_i >= 1`` (Prop. 1): the line at 1 marks the floor. A
-    mode at ``alpha_i = 1`` does **not** contribute to the gap -- it is
-    Gaussian.
+    Parameters
+    ----------
+    alpha : array_like, shape (p,)
+        Generalized eigenvalues ``alpha_i`` (``Sigma_Y`` vs ``Sigma_signal``).
+    beta : array_like, shape (p,), optional
+        Generalized eigenvalues ``beta_i`` (``Sigma_{Y|theta}`` vs
+        ``Sigma_noise``). Omitted if not available.
+    effective_rank : int, optional
+        Mode index beyond which the spectrum is considered numerically flat;
+        marked with a vertical line and annotated.
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw on. A new figure is created if not given.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The parent figure of `ax`.
+
+    Notes
+    -----
+    ``alpha_i, beta_i >= 1`` (Prop. 1): the line at 1 marks the floor. A mode
+    at ``alpha_i = 1`` does **not** contribute to the gap -- it is Gaussian.
 
     A **concentrated** spectrum (a few modes >> 1, the rest at 1) means the
     non-Gaussianity lives in few directions.
@@ -73,15 +96,30 @@ def plot_alpha_spectrum(alpha, beta=None, effective_rank=None, ax=None, title=""
 
 
 def plot_suboptimality(ms, inc, cons, eig_scale=None, ax=None, title=""):
-    """The two constants of Prop. 1 as a function of ``m``.
+    """Plot the incremental and conservative sub-optimality constants of Prop. 1 vs ``m``.
 
     Parameters
     ----------
-    eig_scale : float or None
-        Order of magnitude of the EIG. **Must be supplied**: a
-        sub-optimality constant is only meaningful relative to what it
-        bounds. If it exceeds that quantity, the guarantee ``EIG >= max EIG
-        - constant`` is vacuous, and the figure must show it.
+    ms : array_like, shape (M,)
+        Sensor budgets.
+    inc, cons : array_like, shape (M,)
+        Incremental and conservative sub-optimality constants at each budget
+        in `ms`.
+    eig_scale : float, optional
+        Order of magnitude of the EIG. Should be supplied whenever available:
+        a sub-optimality constant is only meaningful relative to what it
+        bounds. If it exceeds that quantity, the guarantee
+        ``EIG >= max EIG - constant`` is vacuous, and the shaded region above
+        the ``eig_scale`` line makes that visible.
+    ax : matplotlib.axes.Axes, optional
+        Axes to draw on. A new figure is created if not given.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The parent figure of `ax`.
     """
     ax = ax or plt.subplots(figsize=(6, 3.4))[1]
     ax.plot(
@@ -130,11 +168,25 @@ def plot_suboptimality(ms, inc, cons, eig_scale=None, ax=None, title=""):
 
 
 def plot_gap_decomposition(alpha, beta, title=""):
-    """Cumulative contribution of each mode to the gap.
+    """Plot the cumulative contribution of each mode to the total gap, as a percentage.
 
-    The curve reaches 100% at the effective rank. A sharp elbow = concentrated
-    gap; a straight line = spread-out gap, and nothing to be gained by
-    selecting modes.
+    Parameters
+    ----------
+    alpha, beta : array_like, shape (p,)
+        Generalized eigenvalues ``alpha_i``, ``beta_i`` (Prop. 1). The
+        per-mode term is ``0.5 * (log(alpha_i) + log(beta_i))``.
+    title : str, optional
+        Axes title. The total gap (in nats) is appended to it.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Notes
+    -----
+    The curve reaches 100% at the effective rank. A sharp elbow means a
+    concentrated gap; a straight line means a spread-out gap, and nothing to
+    be gained by selecting modes.
     """
     terms = 0.5 * (np.log(np.asarray(alpha)) + np.log(np.asarray(beta)))
     total = terms.sum()
@@ -158,12 +210,25 @@ def plot_gap_decomposition(alpha, beta, title=""):
 
 
 def plot_log_generalized_spectrum(alpha, beta, title=""):
-    """``log(alpha_i)`` and ``log(beta_i)`` overlaid, linear scale.
+    """Plot ``log(alpha_i)`` and ``log(beta_i)`` overlaid, linear scale.
 
-    Visual equivalent of :func:`plot_alpha_spectrum` in ``semilogy`` -- both
-    plot the same quantity on different axes. This one expresses it in
-    directly additive nats (Prop. 1: the gap is a sum of these log-values),
-    without the effective-rank marker.
+    Parameters
+    ----------
+    alpha, beta : array_like, shape (p,)
+        Generalized eigenvalues ``alpha_i``, ``beta_i`` (Prop. 1).
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Notes
+    -----
+    Visual equivalent of :func:`plot_alpha_spectrum` plotted with
+    ``semilogy`` -- both show the same quantity on different axes. This one
+    expresses it in directly additive nats (Prop. 1: the gap is a sum of
+    these log-values), without the effective-rank marker.
     """
     fig, ax = plt.subplots(figsize=(6, 3.4))
 
@@ -199,10 +264,30 @@ def plot_log_generalized_spectrum(alpha, beta, title=""):
 
 
 def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
-    r"""Sub-optimality constants (Prop. 1, eq. (22)/(23)) vs budget -- one
-    pair of curves per ``lambda``, both on a single panel so the incremental
-    (rising) / conservative (falling) trade-off is visible directly.
+    r"""Plot incremental/conservative sub-optimality constants vs budget, one pair of curves
+    per ``lambda``.
 
+    Both families share a single panel so the incremental (rising) /
+    conservative (falling) trade-off is visible directly.
+
+    Parameters
+    ----------
+    ms : array_like, shape (M,)
+        Sensor budgets (can be a dense range, not just the sensor budgets
+        actually used -- the sum, eq. (22)/(23), is cheap to evaluate at any
+        ``m``).
+    inc_by_lambda, cons_by_lambda : dict[float, array_like]
+        ``{lambda: [suboptimality(m, strategy) for m in ms]}``, each value of
+        shape ``(M,)`` matching `ms` -- same keys in both dicts.
+    title : str, optional
+        Axes title.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Notes
+    -----
     (22) and (23) read the *same* spectral terms
     ``t_i = (log(alpha_i) + log(beta_i)) / 2`` two different ways -- a
     **partial sum** over the first ``m`` terms (incremental, solid) or the
@@ -210,13 +295,12 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     consistent with :func:`plot_spectrum_vs_lambda`; line style carries the
     strategy, matching the convention used in ``viz.bounds``.
 
-    Parameters
-    ----------
-    ms : (M,)
-        Budgets (can be a dense range, not just the sensor budgets actually
-        used -- the sum is cheap to evaluate at any ``m``).
-    inc_by_lambda, cons_by_lambda : dict[float, array]
-        ``{lambda: [suboptimality(m, strategy) for m in ms]}``.
+    Examples
+    --------
+    >>> ms = [1, 2, 3, 4]
+    >>> inc_by_lambda = {0.0: [0.4, 0.3, 0.2, 0.1], 1.0: [0.5, 0.4, 0.3, 0.2]}
+    >>> cons_by_lambda = {0.0: [0.1, 0.2, 0.3, 0.4], 1.0: [0.2, 0.3, 0.4, 0.5]}
+    >>> fig = plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda)
     """
     lams = sorted(inc_by_lambda)
     cmap = plt.get_cmap("viridis")
@@ -233,15 +317,29 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     ]
     style_handles = [
         Line2D(
-            [0], [0], color="0.3", lw=1.8, ls="-", marker="o", ms=4,
+            [0],
+            [0],
+            color="0.3",
+            lw=1.8,
+            ls="-",
+            marker="o",
+            ms=4,
             label=r"incremental $\sum_{i=1}^{m}$ (22)",
         ),
         Line2D(
-            [0], [0], color="0.3", lw=1.8, ls="--", marker="s", ms=4,
+            [0],
+            [0],
+            color="0.3",
+            lw=1.8,
+            ls="--",
+            marker="s",
+            ms=4,
             label=r"conservative $\sum_{i=1}^{d-m}$ (23)",
         ),
     ]
-    legend_lambda = ax.legend(handles=lambda_handles, fontsize=7, loc="center left", title=r"$\lambda$")
+    legend_lambda = ax.legend(
+        handles=lambda_handles, fontsize=7, loc="center left", title=r"$\lambda$"
+    )
     ax.add_artist(legend_lambda)
     ax.legend(handles=style_handles, fontsize=7, loc="upper center")
 
@@ -254,15 +352,29 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
 
 
 def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
-    r"""``log(alpha_i)``, ``log(beta_i)`` and their sum -- one curve per ``lambda``.
+    r"""Plot ``log(alpha_i)``, ``log(beta_i)``, and their sum, one curve per ``lambda``.
 
     Three panels: growing non-linearity (increasing ``lambda``) shifts the
     spectrum upward (Prop. 1, the gap grows) -- directly visible here.
 
     Parameters
     ----------
-    alpha_by_lambda, beta_by_lambda : dict[float, array]
-        ``{lambda: alpha_i}`` -- same keys in both dicts.
+    alpha_by_lambda, beta_by_lambda : dict[float, array_like]
+        ``{lambda: alpha_i}`` / ``{lambda: beta_i}``, each value a 1-D array
+        of generalized eigenvalues (length may differ across `lambda`
+        values) -- same keys in both dicts.
+    title : str, optional
+        Figure suptitle.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+
+    Examples
+    --------
+    >>> alpha_by_lambda = {0.0: [1.0, 1.0, 1.2], 1.0: [1.5, 1.3, 1.1]}
+    >>> beta_by_lambda = {0.0: [1.0, 1.0, 1.1], 1.0: [1.4, 1.2, 1.05]}
+    >>> fig = plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda)
     """
     lams = sorted(alpha_by_lambda)
     cmap = plt.get_cmap("viridis")

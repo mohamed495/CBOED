@@ -1,4 +1,4 @@
-r"""Approximation-based diagnostic matrices -- §3.2.
+r"""Compute approximation-based diagnostic matrices -- §3.2.
 
 Third route to ``Sigma_signal`` and ``Sigma_noise``, alongside :mod:`sample_based`
 (§3.1) and :mod:`gradient_based` (§3.3). All three produce the **same** matrices;
@@ -36,10 +36,30 @@ def denoiser_residual(
     u_samples: Float[Array, "n_samples n_obs"],
     features: Float[Array, "n_samples n_feat"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``R_f = (1/N) sum (u - f(features))^{⊗2}``.
+    r"""Compute the denoiser's empirical residual covariance ``R_f``.
 
-    Upper-bounds ``E[Cov(u|Y)]`` (equality iff ``f = E[u|Y]``) -- the reason
-    §3.2 is not certified.
+    .. math::
+        R_f = \frac1N \sum_i (u^{(i)} - f(\mathrm{features}^{(i)}))^{\otimes 2}
+
+    Parameters
+    ----------
+    denoiser : Denoiser
+        Trained approximation ``f`` of ``E[u|features]``.
+    u_samples : Float[Array, "n_samples n_obs"]
+        The ``u(eta^{(i)})`` -- the target to denoise.
+    features : Float[Array, "n_samples n_feat"]
+        The denoiser's inputs (``Y`` for ``f``, ``(Y, theta)`` concatenated
+        for ``g``).
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``R_f``, symmetrized.
+
+    Notes
+    -----
+    ``R_f`` **upper-bounds** ``E[Cov(u|Y)]`` (equality iff ``f = E[u|Y]``) --
+    the reason §3.2 is not certified.
     """
     resid = u_samples - jax.vmap(denoiser)(features)
     out = resid.T @ resid / resid.shape[0]
@@ -52,8 +72,36 @@ def assemble_from_residual(
     Sigma_obs: Float[Array, "n_obs n_obs"],
     n_samples: int,
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``(Sigma_obs^{-1} - Sigma_obs^{-1} R Sigma_obs^{-1})^{-1}`` -- Prop. 3.
+    r"""Assemble ``Sigma^{(N,F)}_signal`` (or ``_noise``) from a residual -- Prop. 3.
 
+    .. math::
+        \Sigma^{(N,F)} = \left(\Sigma_{\rm obs}^{-1}
+            - \Sigma_{\rm obs}^{-1} R \Sigma_{\rm obs}^{-1}\right)^{-1}
+
+    Parameters
+    ----------
+    R : Float[Array, "n_obs n_obs"]
+        Denoiser residual covariance (``R_f`` or ``R_g``, from
+        :func:`denoiser_residual`).
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+    n_samples : int
+        Number of samples ``N`` used to estimate ``R`` -- sets the tolerance
+        of the guard below.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        The assembled matrix, symmetrized.
+
+    Raises
+    ------
+    ValueError
+        If ``R`` exceeds ``Sigma_obs`` well beyond the estimation noise -- the
+        denoiser *degrades* the residual beyond the observation noise.
+
+    Notes
+    -----
     ⚠️ **§3.2 is least reliable in the linear regime** -- the opposite of
     §3.3. When the denoiser is nearly exact (at ``lambda = 0``, the affine one
     is), ``R -> Sigma_obs`` from below with a margin on the order of
@@ -68,14 +116,6 @@ def assemble_from_residual(
     with ``sigma_MC ~ trace(R)/n / sqrt(N)``: it only catches what CANNOT come
     from estimation noise.
 
-    Raises
-    ------
-    ValueError
-        If ``R`` exceeds ``Sigma_obs`` well beyond the estimation noise -- the
-        denoiser *degrades* the residual beyond the observation noise.
-
-    Notes
-    -----
     ⚠️ No ``jit``: the ``if`` below tests a value that depends on ``R`` (thus
     traced under jit), and ``ValueError`` requires a concrete bool. Same
     limitation for :func:`approximation_signal`/:func:`approximation_noise`,
@@ -106,7 +146,26 @@ def approximation_signal(
     Y_samples: Float[Array, "n_samples n_obs"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma^{(N,F)}_signal`` via an already-trained denoiser ``f : Y -> u(eta)``."""
+    r"""Compute ``Sigma^{(N,F)}_signal`` via an already-trained denoiser ``f : Y -> u(eta)``.
+
+    Parameters
+    ----------
+    denoiser : Denoiser
+        Trained approximation ``f`` of ``E[u|Y]``.
+    u_samples : Float[Array, "n_samples n_obs"]
+        The ``u(eta^{(i)})`` -- the target to denoise, drawn jointly with
+        ``Y_samples`` (the same pairs already used for ``Sigma_Y``).
+    Y_samples : Float[Array, "n_samples n_obs"]
+        Observations ``Y^{(i)}``, the denoiser's inputs.
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma^{(N,F)}_signal``, an estimator (not certified) of the signal
+        diagnostic matrix.
+    """
     R_f = denoiser_residual(denoiser, u_samples, Y_samples)
     return assemble_from_residual(R_f, Sigma_obs, u_samples.shape[0])
 
@@ -119,8 +178,30 @@ def approximation_noise(
     theta_samples: Float[Array, "n_samples n_param"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
 ) -> Float[Array, "n_obs n_obs"]:
-    r"""``Sigma^{(N,G)}_noise`` via an already-trained ``g : (Y, theta) -> u(eta)``.
+    r"""Compute ``Sigma^{(N,G)}_noise`` via an already-trained ``g : (Y, theta) -> u(eta)``.
 
+    Parameters
+    ----------
+    denoiser : Denoiser
+        Trained approximation ``g`` of ``E[u|Y, theta]``.
+    u_samples : Float[Array, "n_samples n_obs"]
+        The ``u(eta^{(i)})`` -- the target to denoise.
+    Y_samples : Float[Array, "n_samples n_obs"]
+        Observations ``Y^{(i)}``.
+    theta_samples : Float[Array, "n_samples n_param"]
+        QoI draws ``theta^{(i)}``, concatenated with ``Y_samples`` to form
+        the denoiser's inputs.
+    Sigma_obs : Float[Array, "n_obs n_obs"]
+        Observation noise covariance.
+
+    Returns
+    -------
+    Float[Array, "n_obs n_obs"]
+        ``Sigma^{(N,G)}_noise``, an estimator (not certified) of the noise
+        diagnostic matrix.
+
+    Notes
+    -----
     ``g`` sees ``theta`` in addition to ``Y``, so it denoises better:
     ``R_g ⪯ R_f``, hence ``Sigma_noise ⪯ Sigma_signal`` -- the gap is
     ``gap_h``.

@@ -7,7 +7,7 @@ from jaxtyping import Float, Int
 
 
 class InferenceModel(ABC):
-    r"""Prior + likelihood -> posterior on ``theta``.
+    r"""Base contract mapping a prior and a likelihood to a posterior on ``theta``.
 
     Decides **how the posterior is obtained** (closed form, linearization,
     propagation to a QoI...). *How the EIG is estimated* is the concern of
@@ -31,17 +31,34 @@ class InferenceModel(ABC):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, ""]:
-        """``log det Gamma_post^{-1}`` at point ``theta``.
+        """Compute ``log det Gamma_post^{-1}`` at point ``theta``.
 
-        Via Cholesky (``2 sum log diag L``) -- without inverting, without diagonalizing.
+        Parameters
+        ----------
+        theta : Float[Array, " n_param"]
+            Linearization point.
+        design : Int[Array, " n_sensors"] or None, optional
+            Indices of the observed sensors. ``None`` means the full field
+            is observed.
+
+        Returns
+        -------
+        Float[Array, ""]
+            Log-determinant of the posterior precision, computed via
+            Cholesky (``2 sum log diag L``) -- without inverting, without
+            diagonalizing.
         """
         ...
 
     @abstractmethod
     def log_det_prior_precision(self) -> Float[Array, ""]:
-        """``log det Gamma_prior^{-1}``.
+        """Compute ``log det Gamma_prior^{-1}``.
 
-        No argument: depends neither on ``theta`` nor on ``design``.
+        Returns
+        -------
+        Float[Array, ""]
+            Log-determinant of the prior precision. Takes no argument:
+            depends neither on ``theta`` nor on ``design``.
         """
         ...
 
@@ -52,8 +69,26 @@ class InferenceModel(ABC):
         theta: Float[Array, " n_param"],
         design: Int[Array, " n_sensors"] | None = None,
     ) -> Float[Array, "n_param k"]:
-        """``Gamma_post @ B``, without materializing ``Gamma_post``.
+        """Compute ``Gamma_post @ B`` without materializing ``Gamma_post``.
 
+        Parameters
+        ----------
+        B : Float[Array, "n_param k"]
+            Matrix of ``k`` directions to propagate through the posterior
+            covariance action.
+        theta : Float[Array, " n_param"]
+            Linearization point.
+        design : Int[Array, " n_sensors"] or None, optional
+            Indices of the observed sensors. ``None`` means the full field
+            is observed.
+
+        Returns
+        -------
+        Float[Array, "n_param k"]
+            ``Gamma_post @ B``.
+
+        Notes
+        -----
         A single primitive: the posterior mean (``B = grad``), QoI
         propagation (``B = H^T``), the A-optimal trace, and the dense oracle
         (``B = I``) all derive from it.
