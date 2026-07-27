@@ -7,13 +7,29 @@ catches it (`test_bench.py` tests the conftest, never the scripts).
 
 Notes
 -----
-Aligned with the NumPy prototype: `dt=0.001 x 100` hence `T=0.1`, `n=200`,
-`nu=0.2`, `sigma_obs=0.1`, `Matern32(0.2, 0.3)`, `mu=0`.
+`dt=0.001 x 100` hence `T=0.1`, `n=200`, `sigma_obs=0.1`,
+`Matern32(0.2, 0.3)`, `mu=0` are aligned with the NumPy prototype.
 
-Diffusion length `sqrt(nu T) = 0.141`, i.e. 14% of the domain: the field
-keeps its structure long enough for advection to act. (A benchmark with
-`T=1, nu=0.05` gives 0.22 -- the field is smooth before it can do anything
-nonlinear.)
+`nu=0.003` (not the prototype's `nu=0.2`): diffusion length
+`sqrt(nu T) = 0.017`, i.e. 1.7% of the domain -- a much sharper, shock-like
+regime. Deliberately deviates from the prototype: at `nu=0.2` the
+generalized spectrum of Prop. 1 is extremely concentrated (effective rank
+2-3 out of `N=200`, verified across every tested `lambda` and prior length
+scale -- shortening the prior's correlation length only made it worse,
+since Burgers' diffusion smooths high-frequency content before `T`
+regardless). That collapses the incremental/conservative sub-optimality
+trade-off of eq. (22)/(23) onto a near-flat curve over the realistic sensor
+budgets (`SENSOR_BUDGETS`): both constants saturate almost immediately, so
+neither figure shows the trade-off the proposition predicts. Lowering `nu`
+instead (less numerical diffusion, so less of the nonlinear/non-Gaussian
+signature gets smoothed away before observation) raises the effective rank
+substantially (verified up to 13 at `nu=0.003`) -- but `nu` cannot be
+lowered arbitrarily: below `nu ~= 0.0027`, the spatial Peclet number
+`Pe = max|theta| dx / nu` (see `peclet()`) exceeds the `<= 2` resolution
+limit already enforced by `test_bench_is_resolved`, and the centered
+advection scheme starts to under-resolve the field (checked directly: at
+`nu=0.001`, `Pe ~= 5.5`, well past the limit). `nu=0.003` keeps `Pe ~= 1.8`,
+with margin, while still raising the effective rank from 2-3 to 13.
 """
 
 import jax.numpy as jnp
@@ -26,7 +42,7 @@ from cboed.priors.kernel import Matern32
 N = 200
 NT = 100
 T = 0.1  # dt = T / NT = 0.001
-NU = 0.2
+NU = 0.003
 DOMAIN = [0.0, 1.0]
 
 # -- observation noise -------------------------------------------------------
