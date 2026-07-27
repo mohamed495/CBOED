@@ -335,7 +335,7 @@ def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
 # =============================================================================
 
 
-def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int = 10):
+def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int = 10, fmt: str = "png"):
     """Full field, prior/posterior/``theta_true`` -- no QoI zone (this is the standard case)."""
     Sigma_Y, Sigma_Y_given_theta, methods_diag = once_standard_lambda0
     Sigma_signal, Sigma_noise = methods_diag["gradient"]
@@ -364,13 +364,16 @@ def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int 
             X, np.asarray(prior.sample(k_prior, 200)), np.asarray(post), np.asarray(theta_true),
             sensors=np.asarray(design),
         ),
-        out / "01a_reconstruction_standard_lambda_0.00.png",
+        out / f"01a_reconstruction_standard_lambda_0.00.{fmt}",
     )
 
 
-def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
-    """Restricted to the QoI (first half of the field) -- posterior via GoalOrientedModel,
-    same construction as :func:`make_figures_go.fig_reconstruction`.
+def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10, fmt: str = "png"):
+    """Full field, GO design -- shows the QoI zone shaded *and* the rest of the
+    field, so the contrast is visible: the posterior should contract nicely
+    inside the QoI (what the design was chosen to inform) and stay close to
+    the prior outside it (the GO design has no reason to inform what it was
+    never asked to reconstruct).
     """
     Sigma_Y, Sigma_Y_given_theta, methods_diag = once_go_lambda0
     Sigma_signal, Sigma_noise = methods_diag["gradient"]
@@ -387,25 +390,20 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
     y = model(theta_true, design) + jr.normal(k_noise, (len(design),)) * jnp.sqrt(
         jnp.diag(SIGMA_OBS_MATRIX)[design]
     )
-    mu_post_full = inference._mu(y, prior.mu, design)
+    mu_post = inference._mu(y, prior.mu, design)
+    Gamma_post = inference._cov(prior.mu, design)
 
-    Sigma_theta_prior = go.prior_covariance_qoi(prior.mu)
-    Sigma_theta_post = go.posterior_covariance_qoi(prior.mu, design)
-
-    L_prior = jnp.linalg.cholesky(Sigma_theta_prior + 1e-10 * jnp.eye(N_QOI))
-    L_post = jnp.linalg.cholesky(Sigma_theta_post + 1e-10 * jnp.eye(N_QOI))
-    prior_qoi = prior.mu[:N_QOI] + jr.normal(k_prior, (200, N_QOI)) @ L_prior.T
-    post_qoi = mu_post_full[:N_QOI] + jr.normal(k_post, (200, N_QOI)) @ L_post.T
-
-    design_np = np.asarray(design)
-    sensors_qoi = design_np[design_np < N_QOI]
+    post = mu_post + jr.normal(k_post, (200, N)) @ np.linalg.cholesky(
+        np.asarray(Gamma_post) + 1e-10 * np.eye(N)
+    ).T
+    qoi_span = (float(X[0]), float(X[N_QOI - 1]))
 
     save(
         vf.plot_reconstruction(
-            X_QOI, np.asarray(prior_qoi), np.asarray(post_qoi), np.asarray(theta_true[:N_QOI]),
-            sensors=sensors_qoi if sensors_qoi.size else None,
+            X, np.asarray(prior.sample(k_prior, 200)), np.asarray(post), np.asarray(theta_true),
+            sensors=np.asarray(design), qoi_span=qoi_span,
         ),
-        out / "01b_reconstruction_go_lambda_0.00.png",
+        out / f"01b_reconstruction_go_lambda_0.00.{fmt}",
     )
 
 
@@ -414,7 +412,7 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10):
 # =============================================================================
 
 
-def fig_spectrum(all_once, budgets, out: Path):
+def fig_spectrum(all_once, budgets, out: Path, fmt: str = "png"):
     """``budgets``: the same sensor budgets used everywhere else in the protocol
     (``args.budgets``, cf. ``fig_boxplots``/``strategies_for_method``) -- the
     sub-optimality constants (22)/(23) are evaluated at these ``m``, not some
@@ -456,13 +454,13 @@ def fig_spectrum(all_once, budgets, out: Path):
             continue
         save(
             vs.plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=f"gradient, {case}"),
-            out / f"02_spectrum_vs_lambda_{case}.png",
+            out / f"02_spectrum_vs_lambda_{case}.{fmt}",
         )
         save(
             vs.plot_suboptimality_vs_lambda(
                 ms, inc_by_lambda, cons_by_lambda, title=f"gradient, {case}"
             ),
-            out / f"02b_suboptimality_vs_lambda_{case}.png",
+            out / f"02b_suboptimality_vs_lambda_{case}.{fmt}",
         )
 
 
@@ -471,7 +469,7 @@ def fig_spectrum(all_once, budgets, out: Path):
 # =============================================================================
 
 
-def fig_boxplots(per_method_all, budgets, out: Path):
+def fig_boxplots(per_method_all, budgets, out: Path, fmt: str = "png"):
     """One figure per (lambda, case, method) -- same layout as ``07_bounds_lambda``
     (2 panels, iEIG design / cEIG design), boxplot at each budget instead of
     a continuous band.
@@ -482,7 +480,7 @@ def fig_boxplots(per_method_all, budgets, out: Path):
                 vb.plot_two_strategies_boxplot(
                     budgets, per_strategy, title=rf"{method}, {case}, $\lambda={lambda_}$"
                 ),
-                out / f"03_boxplot_{method}_{case}_lambda_{lambda_:.2f}.png",
+                out / f"03_boxplot_{method}_{case}_lambda_{lambda_:.2f}.{fmt}",
             )
 
 
@@ -522,6 +520,11 @@ def main():
     p.add_argument("--out", default="figures_protocol")
     p.add_argument("--cache", default=".cache_protocol")
     p.add_argument("--force", action="store_true")
+    p.add_argument(
+        "--format", choices=("png", "pdf"), default="png",
+        help="Figure file format. 'pdf' is vector (text/lines stay crisp at any print size) --"
+             " use it for figures going into the paper; 'png' (default) for quick inspection.",
+    )
     p.add_argument(
         "--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         help="Logging verbosity. INFO (default) shows per-repeat/per-figure progress;"
@@ -564,11 +567,11 @@ def main():
             # than appearing all at once at the end.
             logger.info("figures lambda=%s case=%s ...", lambda_, case)
             if lambda_ == 0.0 and case == "standard":
-                fig_reconstruction_standard(once, out)
+                fig_reconstruction_standard(once, out, fmt=args.format)
             if lambda_ == 0.0 and case == "go":
-                fig_reconstruction_go(once, out)
-            fig_spectrum(all_once, args.budgets, out)
-            fig_boxplots({(lambda_, case): per_method}, args.budgets, out)
+                fig_reconstruction_go(once, out, fmt=args.format)
+            fig_spectrum(all_once, args.budgets, out, fmt=args.format)
+            fig_boxplots({(lambda_, case): per_method}, args.budgets, out, fmt=args.format)
 
     logger.info("-> %s", out.resolve())
 
