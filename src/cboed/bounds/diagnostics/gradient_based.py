@@ -29,6 +29,7 @@ from beartype import beartype
 from jax import Array
 from jaxtyping import Float, PRNGKeyArray, jaxtyped
 
+from cboed.bounds.base import chunked_vmap
 from cboed.priors.base import Prior
 
 
@@ -61,13 +62,18 @@ def psd_sqrt(A: Float[Array, "n n"]) -> Float[Array, "n n"]:
 def _expected_quadratic(
     Jacs: Float[Array, "n_samples a b"],
     chol: tuple[Float[Array, "a a"], bool],
+    chunk_size: int | None = None,
 ) -> Float[Array, "b b"]:
-    """Compute ``E[J^T M^{-1} J]`` over the sample, ``M`` given by its Cholesky factorization."""
+    """Compute ``E[J^T M^{-1} J]`` over the sample, ``M`` given by its Cholesky factorization.
+
+    ``chunk_size`` : forwarded to :func:`~cboed.bounds.base.chunked_vmap` to
+    bound peak memory when ``n_samples`` is large (see :func:`expected_jacobian_moments`).
+    """
 
     def quad(J: Float[Array, "a b"]) -> Float[Array, "b b"]:
         return J.T @ jsp.linalg.cho_solve(chol, J)
 
-    out = jnp.mean(jax.vmap(quad)(Jacs), axis=0)
+    out = jnp.mean(chunked_vmap(quad, Jacs, chunk_size=chunk_size), axis=0)
     return 0.5 * (out + out.T)
 
 
@@ -76,12 +82,13 @@ def _expected_quadratic(
 # =============================================================================
 
 
-@partial(jax.jit, static_argnums=(0,))
+@partial(jax.jit, static_argnums=(0, 3))
 @jaxtyped(typechecker=beartype)
 def expected_jacobian_moments(
     u,
     etas: Float[Array, "n_samples n_eta"],
     Sigma_obs: Float[Array, "n_obs n_obs"],
+    chunk_size: int | None = None,
 ) -> tuple[Float[Array, "n_eta n_obs"], Float[Array, "n_eta n_eta"]]:
     r"""Compute the moments ``(L(u), H(u))`` -- equations (31)-(32).
 
@@ -93,6 +100,11 @@ def expected_jacobian_moments(
         Draws from the prior on ``eta``.
     Sigma_obs : Float[Array, "n_obs n_obs"]
         Observation noise covariance.
+    chunk_size : int or None, optional
+        Forwarded to :func:`~cboed.bounds.base.chunked_vmap` for both the
+        per-sample Jacobian evaluation and the quadratic-form reduction --
+        bounds peak memory to ``chunk_size`` Jacobians at a time instead of
+        ``n_samples`` (see Notes). ``None`` (default): a single ``vmap``.
 
     Returns
     -------
@@ -109,20 +121,26 @@ def expected_jacobian_moments(
     dominates the variance -- in particular when the Jacobian is constant,
     where ``H(u)`` must be **exactly** zero.
 
-    ``O(N p q)`` memory: the Jacobians are materialized.
+    ``O(N p q)`` memory: the Jacobians are materialized. At full-field scale
+    (large ``N``, ``p = q = n_obs`` in the hundreds) a single fused ``vmap``
+    of ``jacfwd`` followed by a per-sample quadratic form can require several
+    GiB of GPU memory even though the final arrays are modest -- XLA keeps
+    multiple ``(n_samples, p, q)``-shaped intermediates alive simultaneously
+    during the fused computation. ``chunk_size`` bounds that peak.
     """
-    Jacs = jax.vmap(jax.jacfwd(u))(etas)
+    Jacs = chunked_vmap(jax.jacfwd(u), etas, chunk_size=chunk_size)
     J_bar = jnp.mean(Jacs, axis=0)
     chol_obs = jsp.linalg.cho_factor(Sigma_obs, lower=True)
-    return J_bar.T, _expected_quadratic(Jacs - J_bar, chol_obs)
+    return J_bar.T, _expected_quadratic(Jacs - J_bar, chol_obs, chunk_size=chunk_size)
 
 
-@partial(jax.jit, static_argnums=(0,))
+@partial(jax.jit, static_argnums=(0, 3))
 @jaxtyped(typechecker=beartype)
 def qoi_fisher_moment(
     h,
     etas: Float[Array, "n_samples n_eta"],
     Sigma_xi: Float[Array, "n_param n_param"],
+    chunk_size: int | None = None,
 ) -> Float[Array, "n_eta n_eta"]:
     r"""Compute the QoI Fisher moment ``J(h) = E[Jac h^T Sigma_xi^{-1} Jac h]`` -- equation (33).
 
@@ -137,6 +155,9 @@ def qoi_fisher_moment(
     Sigma_xi : Float[Array, "n_param n_param"]
         Covariance of the QoI noise ``xi``. Must be strictly positive
         definite: see Notes.
+    chunk_size : int or None, optional
+        Forwarded to :func:`~cboed.bounds.base.chunked_vmap` -- see
+        :func:`expected_jacobian_moments`. ``None`` (default): a single ``vmap``.
 
     Returns
     -------
@@ -149,9 +170,9 @@ def qoi_fisher_moment(
     ``J(h) -> inf``: the case ``xi = 0`` is not reachable here, it belongs to
     :func:`gradient_diagnostics_standard`.
     """
-    Jacs_h = jax.vmap(jax.jacfwd(h))(etas)
+    Jacs_h = chunked_vmap(jax.jacfwd(h), etas, chunk_size=chunk_size)
     chol_xi = jsp.linalg.cho_factor(Sigma_xi, lower=True)
-    return _expected_quadratic(Jacs_h, chol_xi)
+    return _expected_quadratic(Jacs_h, chol_xi, chunk_size=chunk_size)
 
 
 @partial(jax.jit, static_argnums=(0,))
@@ -318,7 +339,7 @@ def assemble_misfit(
 # =============================================================================
 
 
-@partial(jax.jit, static_argnums=(0, 1, 2, 6))
+@partial(jax.jit, static_argnums=(0, 1, 2, 6, 7))
 @jaxtyped(typechecker=beartype)
 def gradient_diagnostics(
     u,
@@ -328,6 +349,7 @@ def gradient_diagnostics(
     Sigma_xi: Float[Array, "n_param n_param"],
     key: PRNGKeyArray,
     n_samples: int,
+    chunk_size: int | None = None,
 ) -> tuple[Float[Array, "n_obs n_obs"], Float[Array, "n_obs n_obs"]]:
     r"""Compute ``(Sigma_signal, Sigma_noise)`` in the goal-oriented setting -- Prop. 4.
 
@@ -350,6 +372,10 @@ def gradient_diagnostics(
         Random key for sampling ``eta``.
     n_samples : int
         Number of Monte Carlo samples for the moments.
+    chunk_size : int or None, optional
+        Forwarded to :func:`expected_jacobian_moments`/:func:`qoi_fisher_moment`
+        to bound peak memory at large ``n_samples``. ``None`` (default): a
+        single ``vmap``.
 
     Returns
     -------
@@ -365,13 +391,13 @@ def gradient_diagnostics(
     with no alternative.
     """
     etas = prior_eta.sample(key, n_samples)
-    L, H = expected_jacobian_moments(u, etas, Sigma_obs)
-    J_h = qoi_fisher_moment(h, etas, Sigma_xi)
+    L, H = expected_jacobian_moments(u, etas, Sigma_obs, chunk_size=chunk_size)
+    J_h = qoi_fisher_moment(h, etas, Sigma_xi, chunk_size=chunk_size)
     I_eta = fisher_information_prior(prior_eta)
     return assemble(L, H + I_eta, Sigma_obs), assemble(L, H + I_eta + J_h, Sigma_obs)
 
 
-@partial(jax.jit, static_argnums=(0, 1, 4))
+@partial(jax.jit, static_argnums=(0, 1, 4, 5))
 @jaxtyped(typechecker=beartype)
 def gradient_diagnostics_standard(
     u,
@@ -379,6 +405,7 @@ def gradient_diagnostics_standard(
     Sigma_obs: Float[Array, "n_obs n_obs"],
     key: PRNGKeyArray,
     n_samples: int,
+    chunk_size: int | None = None,
 ) -> tuple[Float[Array, "n_obs n_obs"], Float[Array, "n_obs n_obs"]]:
     r"""Compute ``(Sigma_signal, Sigma_noise)`` in the standard setting ``Y = u(theta) + eps``.
 
@@ -394,6 +421,9 @@ def gradient_diagnostics_standard(
         Random key for sampling ``theta``.
     n_samples : int
         Number of Monte Carlo samples for the moments.
+    chunk_size : int or None, optional
+        Forwarded to :func:`expected_jacobian_moments` to bound peak memory
+        at large ``n_samples``. ``None`` (default): a single ``vmap``.
 
     Returns
     -------
@@ -412,6 +442,6 @@ def gradient_diagnostics_standard(
     there remains an ``O(Sigma_xi)`` term, and the enclosure flips.
     """
     thetas = prior_theta.sample(key, n_samples)
-    L, H = expected_jacobian_moments(u, thetas, Sigma_obs)
+    L, H = expected_jacobian_moments(u, thetas, Sigma_obs, chunk_size=chunk_size)
     I_theta = fisher_information_prior(prior_theta)
     return assemble(L, H + I_theta, Sigma_obs), Sigma_obs

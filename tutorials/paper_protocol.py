@@ -8,25 +8,37 @@ approximation). Each repetition redraws every MC quantity with a fresh key
 **and** reselects the design via greedy -- as the NumPy prototype does with
 its ``N_REPEATS``.
 
-Three figures
--------------
-1. Reconstruction (``lambda=0``): two separate figures -- (a) standard case,
-   prior/posterior/``theta_true`` on the full field; (b) GO case, same thing
-   but restricted to the QoI, posterior via ``GoalOrientedModel``.
-2. Spectrum ``log(alpha_i)``, ``log(beta_i)``, their sum (``lambda > 0``,
-   gradient method only, standard and GO) -- Prop. 1.
-3. Boxplots of the bounds (incremental and conservative) over the
-   ``N_repeats``, one series per method. The conservative bound uses
-   ``eig_full`` estimated by nested Monte-Carlo (``NestedMonteCarloEIG`` in
-   standard, ``GoalOrientedNestedMonteCarloEIG`` in GO) -- not the certified
-   default.
+Figures, mapped to the paper's narrative arc
+---------------------------------------------
+1. Setup (``01a``/``01b``, ``lambda=0``) -- two separate figures, full field
+   in both: (a) standard case, prior/posterior/``theta_true``; (b) GO case,
+   same posterior machinery (``inference._mu``/``_cov``, the full field, not
+   just the QoI submatrix) but with the QoI region shaded (``qoi_span``), so
+   the contrast is visible in one figure -- the posterior contracts inside
+   the shaded zone and stays close to the prior outside it, since the GO
+   design was never asked to inform anything else.
+2. Why (``02``/``02b``, ``lambda > 0``, gradient method, standard and GO) --
+   Prop. 1. ``02``: the raw per-mode spectrum ``log(alpha_i)``, ``log(beta_i)``,
+   their sum. ``02b``: the two eq. (22)/(23) sub-optimality constants vs
+   budget ``m`` (same spectral terms, summed the other way) -- this is the
+   figure that shows the incremental/conservative trade-off is real at the
+   sensor budgets actually used, not just in the abstract.
+3. Certification payoff (``03``): boxplots of the certified bounds
+   (incremental and conservative) over the ``N_repeats``, one series per
+   method. The conservative bound uses ``eig_full`` estimated by nested
+   Monte-Carlo (``NestedMonteCarloEIG`` in standard, ``GoalOrientedNestedMonteCarloEIG``
+   in GO) -- not the certified default.
+4. Cost of certification -- not produced by this script:
+   ``compare_signal_noise_methods.py`` (``--case standard|go``) compares the
+   gradient route (Prop. 4, certified) against the affine/affine+NN routes
+   (Prop. 3, cheaper but not certified, and not always applicable).
 
 Fragile methods
 ------------------
 The affine approximation alone raises ``ValueError`` (Prop. 3 not satisfied)
 as soon as ``lambda`` moves away from 0 at realistic scale -- expected, not a
 protocol error. A method that fails for a given ``(lambda, case, repeat)`` is
-simply absent from that point: no crash, a diagnostic print.
+simply absent from that point: no crash, a ``logger.warning`` message.
 
 Default scale: reduced (pipeline validation, not publication-grade figures).
 Increase ``--n-samples``, ``--n-gradient``, ``--net-steps``, ``--nmc-*`` for
@@ -121,8 +133,19 @@ def paired_samples(u, prior, key, n_samples):
 # =============================================================================
 
 
-def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: int, net_steps: int):
-    """``(Sigma_Y, Sigma_Y_given_theta, {method: (Sigma_signal, Sigma_noise) | None})``."""
+def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: int, net_steps: int,
+                    n_gradient_chunk_size: int | None = None):
+    """``(Sigma_Y, Sigma_Y_given_theta, {method: (Sigma_signal, Sigma_noise) | None})``.
+
+    ``n_gradient_chunk_size`` : bounds the gradient route's peak memory
+    (``expected_jacobian_moments``/``qoi_fisher_moment``) to
+    ``n_gradient_chunk_size`` Jacobians at a time instead of ``n_gradient`` --
+    see ``cboed.bounds.base.chunked_vmap``. At full-field scale, a single
+    fused ``vmap`` over ``n_gradient`` (n_obs, n_obs) Jacobians plus their
+    quadratic form can need several GiB even though the final matrices are
+    small -- this is what caused the GPU OOM inside ``greedy_schur`` (the
+    first point downstream that forces JAX to materialize the result).
+    """
     prior, model, u, likelihood, inference, go = build_case(lambda_, case)
     k_pairs, k_Y, k_Yth, k_grad, k_net_f, k_net_g = jr.split(key, 6)
 
@@ -133,7 +156,7 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
         Sigma_Y_given_theta = SIGMA_OBS_MATRIX
         theta_for_noise = eta
         Sigma_signal_g, Sigma_noise_g = gradient_diagnostics_standard(
-            u, prior, SIGMA_OBS_MATRIX, k_grad, n_gradient
+            u, prior, SIGMA_OBS_MATRIX, k_grad, n_gradient, chunk_size=n_gradient_chunk_size
         )
     else:
         Sigma_Y_given_theta = sample_Sigma_Y_given_theta(
@@ -141,7 +164,8 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
         )
         theta_for_noise = eta[:, :N_QOI]
         Sigma_signal_g, Sigma_noise_g = gradient_diagnostics(
-            u, QOI_H, prior, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_grad, n_gradient
+            u, QOI_H, prior, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_grad, n_gradient,
+            chunk_size=n_gradient_chunk_size,
         )
 
     methods: dict = {"gradient": (Sigma_signal_g, Sigma_noise_g)}
@@ -246,7 +270,7 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
 
 def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_steps,
                          nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed,
-                         eig_full_mode="certified", nmc_chunk_size=None):
+                         eig_full_mode="certified", nmc_chunk_size=None, n_gradient_chunk_size=None):
     """Repetition loop -- 'once' diagnostics (repeat 0) + bounds per repetition.
 
     Parameters
@@ -269,7 +293,8 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
         k_diag, k_eig = jr.split(key)
         logger.info("repeat %d/%d ...", r + 1, n_repeats)
         Sigma_Y, Sigma_Y_given_theta, methods_diag = compute_repeat(
-            lambda_, case, k_diag, n_samples, n_gradient, net_steps
+            lambda_, case, k_diag, n_samples, n_gradient, net_steps,
+            n_gradient_chunk_size=n_gradient_chunk_size,
         )
         eig_full_mc = None
         if eig_full_mode == "mc":
@@ -517,6 +542,16 @@ def main():
              " this is the cause of the OOM with the default --nmc-* values without chunking."
              " Increase if the GPU has headroom (faster), decrease if it still OOMs.",
     )
+    p.add_argument(
+        "--n-gradient-chunk-size", type=int, default=500,
+        help="Bounds the gradient route's peak memory (Prop. 4, expected_jacobian_moments/"
+             "qoi_fisher_moment) to this many Jacobians at a time instead of all --n-gradient"
+             " at once (cboed.bounds.base.chunked_vmap). At full-field scale a single fused"
+             " vmap over --n-gradient (n_obs, n_obs) Jacobians can need several GiB even though"
+             " the final matrices are small -- this caused a GPU OOM inside greedy_schur (the"
+             " first point downstream that forces materialization). Increase if the GPU has"
+             " headroom (faster), decrease if it still OOMs.",
+    )
     p.add_argument("--out", default="figures_protocol")
     p.add_argument("--cache", default=".cache_protocol")
     p.add_argument("--force", action="store_true")
@@ -555,7 +590,7 @@ def main():
                 net_steps=args.net_steps, nmc_n_outer=args.nmc_n_outer, nmc_n_inner=args.nmc_n_inner,
                 nmc_n_inner_theta=args.nmc_n_inner_theta, nmc_n_inner_marginal=args.nmc_n_inner_marginal,
                 budgets=args.budgets, base_seed=args.seed, eig_full_mode=args.eig_full_mode,
-                nmc_chunk_size=args.nmc_chunk_size,
+                nmc_chunk_size=args.nmc_chunk_size, n_gradient_chunk_size=args.n_gradient_chunk_size,
             )
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method
