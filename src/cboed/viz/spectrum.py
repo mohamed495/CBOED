@@ -351,11 +351,13 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     return fig
 
 
-def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
-    r"""Plot ``log(alpha_i)``, ``log(beta_i)``, and their sum, one curve per ``lambda``.
+def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title="", max_modes=15):
+    r"""Plot the first modes of ``log(alpha_i)`` and ``log(beta_i)``.
 
-    Three panels: growing non-linearity (increasing ``lambda``) shifts the
-    spectrum upward (Prop. 1, the gap grows) -- directly visible here.
+    The logarithmic quantities are retained, with a symmetric logarithmic
+    vertical scale to keep values close to zero and negative ``log(beta_i)``
+    readable. The remaining modes are omitted because they are numerically
+    flat in the benchmark.
 
     Parameters
     ----------
@@ -365,6 +367,8 @@ def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
         values) -- same keys in both dicts.
     title : str, optional
         Figure suptitle.
+    max_modes : int, optional
+        Number of modes shown, by default 15.
 
     Returns
     -------
@@ -377,24 +381,25 @@ def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=""):
     >>> fig = plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda)
     """
     lams = sorted(alpha_by_lambda)
-    cmap = plt.get_cmap("viridis")
+    cmap = plt.get_cmap("cividis")
     colors = {lam: cmap(i / max(len(lams) - 1, 1)) for i, lam in enumerate(lams)}
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), sharex=True)
     for lam in lams:
-        alpha = np.asarray(alpha_by_lambda[lam])
-        beta = np.asarray(beta_by_lambda[lam])
-        idx = np.arange(1, len(alpha) + 1)
+        alpha = np.asarray(alpha_by_lambda[lam])[:max_modes]
+        beta = np.asarray(beta_by_lambda[lam])[:max_modes]
+        idx = np.arange(1, min(len(alpha), len(beta)) + 1)
+        alpha = alpha[: len(idx)]
+        beta = beta[: len(idx)]
         label = rf"$\lambda={lam}$"
         axes[0].plot(idx, np.log(alpha), lw=1.5, color=colors[lam], label=label)
         axes[1].plot(idx, np.log(beta), lw=1.5, color=colors[lam], label=label)
-        axes[2].plot(idx, np.log(alpha) + np.log(beta), lw=1.5, color=colors[lam], label=label)
 
     axes[0].set_ylabel(r"$\log(\alpha_i)$")
     axes[1].set_ylabel(r"$\log(\beta_i)$")
-    axes[2].set_ylabel(r"$\log(\alpha_i) + \log(\beta_i)$")
     for ax in axes:
         ax.set_xlabel("mode index")
+        ax.set_yscale("symlog", linthresh=1e-3)
         ax.axhline(0, color="0.6", lw=0.8, ls=":")
         ax.legend(fontsize=7)
     if title:
