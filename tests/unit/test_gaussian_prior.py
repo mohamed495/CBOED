@@ -38,7 +38,6 @@ def test_isinstance(setup: Setup) -> None:
 
 
 def test_log_prior_value(setup: Setup) -> None:
-
     n = setup.gauss_prior.prior.mu.shape[0]
     theta = jnp.arange(1.0, n + 1)
     mu = setup.gauss_prior.prior.mu

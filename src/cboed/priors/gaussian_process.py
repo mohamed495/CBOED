@@ -28,6 +28,11 @@ class GaussianProcess:
         Prior mean. Its length fixes the grid size.
     domain : tuple[float, float], default=(0.0, 1.0)
         Spatial interval.
+    boundary_values : Float[Array, "2"] | None, default=None
+        Fixed values at the left and right boundaries. When provided, the
+        Gaussian process is first constructed on the full grid, including
+        both boundary points, and then conditioned on those values. The
+        resulting ``mu`` and ``Sigma`` contain only the interior points.
     jitter : float, default=1e-8
         **Relative** nugget: the diagonal receives ``jitter * tr(K)/n``.
 
@@ -56,15 +61,31 @@ class GaussianProcess:
         mu: Float[Array, " n_param"],
         domain: tuple[float, float] = (0.0, 1.0),
         jitter: float = 1e-8,
+        boundary_values: Float[Array, "2"] | None = None,
     ) -> None:
         if jitter < 0:
             raise ValueError(f"jitter must be >= 0, got {jitter}")
+        if boundary_values is not None:
+            boundary_values = jnp.asarray(boundary_values)
+            if boundary_values.shape != (2,):
+                raise ValueError(
+                    "boundary_values must contain exactly the left and right "
+                    f"boundary values, got shape {boundary_values.shape}"
+                )
         self.kernel = kernel
-        self.mu = mu
         self.domain = domain
         self.jitter = jitter
-        self.x = jnp.linspace(domain[0], domain[1], len(mu))
-        self.Sigma = self._build_covariance(self.x)
+        self.boundary_values = boundary_values
+
+        if boundary_values is None:
+            self.mu = mu
+            self.x = jnp.linspace(domain[0], domain[1], len(mu))
+            self.Sigma = self._build_covariance(self.x)
+        else:
+            x_full = jnp.linspace(domain[0], domain[1], len(mu) + 2)
+            Sigma_full = self._build_covariance(x_full)
+            self.x = x_full[1:-1]
+            self.mu, self.Sigma = self._condition_on_boundaries(mu, Sigma_full, boundary_values)
 
     def _build_covariance(self, x: Float[Array, " n_param"]) -> Float[Array, "n_param n_param"]:
         """Evaluate the kernel Gram matrix on `x` and add the relative nugget.
@@ -83,6 +104,44 @@ class GaussianProcess:
         n = x.shape[0]
         scale = jnp.trace(K) / n
         return K + self.jitter * scale * jnp.eye(n, dtype=K.dtype)
+
+    @staticmethod
+    def _condition_on_boundaries(
+        mu: Float[Array, " n_interior"],
+        Sigma: Float[Array, " n_full n_full"],
+        boundary_values: Float[Array, "2"],
+    ) -> tuple[Float[Array, " n_interior"], Float[Array, " n_interior n_interior"]]:
+        r"""Condition a Gaussian vector on its two boundary values.
+
+        Parameters
+        ----------
+        mu : Float[Array, "n_interior"]
+            Prior mean on the interior grid. The boundary mean is assumed to
+            be zero, consistently with the default Gaussian-process mean.
+        Sigma : Float[Array, "n_full n_full"]
+            Covariance on the full grid, including both boundaries.
+        boundary_values : Float[Array, "2"]
+            Fixed values at the left and right boundaries.
+
+        Returns
+        -------
+        tuple[Float[Array, "n_interior"], Float[Array, "n_interior n_interior"]]
+            Conditional mean and covariance on the interior grid.
+
+        Notes
+        -----
+        The covariance is computed with the Schur complement. Linear solves
+        are used instead of explicitly forming ``Sigma_ee^{-1}``.
+        """
+        boundary = jnp.array([0, Sigma.shape[0] - 1])
+        Sigma_ii = Sigma[1:-1, 1:-1]
+        Sigma_ie = Sigma[1:-1, boundary]
+        Sigma_ee = Sigma[jnp.ix_(boundary, boundary)]
+
+        correction = Sigma_ie @ jnp.linalg.solve(Sigma_ee, Sigma_ie.T)
+        conditional_covariance = Sigma_ii - correction
+        conditional_mean = mu + Sigma_ie @ jnp.linalg.solve(Sigma_ee, boundary_values)
+        return conditional_mean, conditional_covariance
 
 
 class GaussianPrior(Prior):

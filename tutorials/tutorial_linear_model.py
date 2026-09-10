@@ -90,7 +90,8 @@ prior = GaussianProcess(
         length_scale=KERNEL_LENGTH_SCALE,
         sigma=KERNEL_SIGMA,
     ),
-    mu=jnp.zeros(model.n),
+    mu=jnp.ones(model.n),
+    boundary_values=jnp.ones(2),
 )
 
 

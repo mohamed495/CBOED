@@ -94,7 +94,8 @@ def make_prior(n: int = N) -> GaussianPrior:
     -------
     GaussianPrior
         Prior with a Matern-3/2 kernel (`KERNEL_LENGTH_SCALE`,
-        `KERNEL_SIGMA`) on `DOMAIN`, zero mean.
+        `KERNEL_SIGMA`) on `DOMAIN`, conditioned on homogeneous Dirichlet
+        values at the two boundaries.
 
     Examples
     --------
@@ -106,6 +107,7 @@ def make_prior(n: int = N) -> GaussianPrior:
         kernel=Matern32(length_scale=KERNEL_LENGTH_SCALE, sigma=KERNEL_SIGMA),
         mu=jnp.zeros(n),
         domain=tuple(DOMAIN),
+        boundary_values=jnp.ones(2),
     )
     return GaussianPrior(prior=gp)
 
