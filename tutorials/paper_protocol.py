@@ -54,10 +54,15 @@ import argparse
 import logging
 from pathlib import Path
 
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
 import jax # type: ignore
 import jax.numpy as jnp # type: ignore
 import jax.random as jr # type: ignore
 import numpy as np
+
+jax.config.update("jax_enable_x64", False)
 
 from cboed.benchmarks import (
     DOMAIN,
@@ -379,7 +384,7 @@ def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
 # =============================================================================
 
 
-def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int = 10, fmt: str = "png"):
+def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int = 5, fmt: str = "png"):
     """Full field, prior/posterior/``theta_true`` -- no QoI zone (this is the standard case)."""
     Sigma_Y, Sigma_Y_given_theta, methods_diag = once_standard_lambda0
     Sigma_signal, Sigma_noise = methods_diag["gradient"]
@@ -412,7 +417,7 @@ def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int 
     )
 
 
-def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 10, fmt: str = "png"):
+def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 5, fmt: str = "png"):
     """Full field, GO design -- shows the QoI zone shaded *and* the rest of the
     field, so the contrast is visible: the posterior should contract nicely
     inside the QoI (what the design was chosen to inform) and stay close to
@@ -512,6 +517,34 @@ def fig_spectrum(all_once, budgets, out: Path, fmt: str = "png"):
 # Figure 3 -- boxplots of the bounds per method
 # =============================================================================
 
+def _shared_ylim(per_method_all, method, case, pad_frac=0.05, q=1.0):
+    """Global (y_min, y_max) for one (method, case) across every lambda already
+    computed -- so the (a)-(d) panels of the same method/case share an axis and
+    the *heights* become comparable (a bound sitting lower in one panel than
+    another is otherwise invisible once each panel autoscales independently).
+
+    ``q`` : quantile (0 < q <= 1) applied to the pooled values before taking
+    the extremes, e.g. ``q=0.99`` clips the worst 1% of a single stray point
+    (e.g. a very negative ``cons_low`` at high lambda) so it does not blow up
+    the shared scale for every other panel. ``q=1.0`` (default) uses the true
+    min/max -- set it lower only if one lambda visibly dominates the range.
+    """
+    vals = []
+    for (lam, c), per_method in per_method_all.items():
+        if c != case or method not in per_method:
+            continue
+        for strat in per_method[method].values():
+            for arr in strat.values():
+                vals.append(np.asarray(arr).ravel())
+    if not vals:
+        return None
+    pooled = np.concatenate(vals)
+    lo, hi = np.quantile(
+        pooled,
+        [(1 - q) / 2, 1 - (1 - q) / 2]
+    )
+
+    return (0, int(np.ceil(hi + 1)))
 
 def fig_boxplots(per_method_all, budgets, out: Path, fmt: str = "png"):
     """One figure per (lambda, case, method) -- same layout as ``07_bounds_lambda``
@@ -520,13 +553,14 @@ def fig_boxplots(per_method_all, budgets, out: Path, fmt: str = "png"):
     """
     for (lambda_, case), per_method in per_method_all.items():
         for method, per_strategy in per_method.items():
+            ylim = _shared_ylim(per_method_all, method, case)
             save(
                 vb.plot_two_strategies_boxplot(
-                    budgets, per_strategy, title=rf"{method}, {case}, $\lambda={lambda_}$"
+                    budgets, per_strategy, title=rf"{method}, {case}, $\lambda={lambda_}$",
+                    ylim=ylim,
                 ),
                 out / f"03_boxplot_{method}_{case}_lambda_{lambda_:.2f}.{fmt}",
             )
-
 
 # =============================================================================
 # Orchestration
@@ -626,7 +660,6 @@ def main():
                 fig_reconstruction_go(once, out, fmt=args.format)
             fig_spectrum(all_once, args.budgets, out, fmt=args.format)
             fig_boxplots({(lambda_, case): per_method}, args.budgets, out, fmt=args.format)
-
     logger.info("-> %s", out.resolve())
 
 

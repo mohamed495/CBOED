@@ -144,6 +144,8 @@ def main() -> None:
         Sigma_signal_grad, Sigma_noise_grad = gradient_diagnostics(
             u, QOI_H, prior, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_grad, args.n_gradient
         )
+    n_fit = u_vals.shape[0] // 2
+    fit_sl, ev_sl = slice(None, n_fit), slice(n_fit, None)
 
     if args.lambda_ == 0.0:
         # Rem. 2.2: at lambda=0 the forward model is exactly linear, so the

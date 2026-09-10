@@ -42,7 +42,7 @@ from cboed.priors.kernel import Matern32
 N = 200
 NT = 100
 T = 0.1  # dt = T / NT = 0.001
-NU = 0.003
+NU = 0.02
 DOMAIN = [0.0, 1.0]
 
 # -- observation noise -------------------------------------------------------
@@ -55,7 +55,7 @@ KERNEL_SIGMA = 0.3
 
 # -- sweeps --------------------------------------------------------------
 LAMBDAS = (0.0, 0.25, 0.5, 1.0)
-SENSOR_BUDGETS = (5, 10, 15, 20, 25)
+SENSOR_BUDGETS = tuple(range(1, 16))
 
 # -- goal-oriented: QoI = first half of the field ---------------------------
 # Sigma_xi = 0 exactly is a singular limit (qoi_fisher_moment diverges,
@@ -105,7 +105,7 @@ def make_prior(n: int = N) -> GaussianPrior:
     """
     gp = GaussianProcess(
         kernel=Matern32(length_scale=KERNEL_LENGTH_SCALE, sigma=KERNEL_SIGMA),
-        mu=jnp.zeros(n),
+        mu=jnp.ones(n),
         domain=tuple(DOMAIN),
         boundary_values=jnp.ones(2),
     )

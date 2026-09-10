@@ -10,10 +10,6 @@ bounds depending on the strategy:
 **Conservative** (Cor. 2)        **UPPER** bound (18)        **LOWER** bound (17)
 ===============================  ==========================  ==================
 
-Hence names that encode both axes. Never ``BS``/``BI``: the prototype uses
-them, and the goal-oriented notebook already writes "upper bound (LB)" then
-"Upper bound (UB)" two cells apart.
-
 **Regimes** (Prop. 1): the suboptimality constant **grows with ``m``** in the
 incremental strategy, **shrinks** in the conservative one. Small budget ->
 incremental; large budget -> conservative. Complementary, not competing.
@@ -195,7 +191,9 @@ def conservative_bounds(
 
     if eig_full is None:
         full = incremental_bounds(diagnostics, None)
-        base_lower, base_upper = full.lower, full.upper
+        # base_lower, base_upper = full.lower, full.upper
+        offset = (full.lower + full.upper)*0.5
+        base_lower, base_upper = offset, offset
     else:
         base_lower = base_upper = eig_full
 

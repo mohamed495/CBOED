@@ -40,3 +40,6 @@ PyBOED_Architecture_2.md
 .cache_protocol
 *.log
 CLAUDE.md
+run.sh
+*.stdout
+*.stderr

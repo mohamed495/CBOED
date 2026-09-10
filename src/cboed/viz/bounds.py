@@ -407,7 +407,7 @@ def plot_bounds_boxplot_vs_m(ms, inc_low, inc_up, cons_low=None, cons_up=None, a
     return ax.figure
 
 
-def plot_two_strategies_boxplot(ms, per_strategy, title=""):
+def plot_two_strategies_boxplot(ms, per_strategy, title="", ylim=None):
     """Plot boxplot bounds for several designs side by side.
 
     Boxplot version of :func:`plot_two_strategies` -- same layout. Each panel
@@ -435,6 +435,9 @@ def plot_two_strategies_boxplot(ms, per_strategy, title=""):
         plot_bounds_boxplot_vs_m(
             ms, b["inc_low"], b["inc_up"], b.get("cons_low"), b.get("cons_up"), ax=ax, title=label
         )
+        if ylim is not None:
+            ax.set_ylim(*ylim)
+
     for ax in axes[0][1:]:
         ax.set_ylabel("")
     if title:
