@@ -64,6 +64,15 @@ def test_nmc_is_deterministic_given_key(setup_linear):
     assert jnp.array_equal(a, b)
 
 
+def test_nmc_inner_chunking_matches_unchunked_estimate(setup_linear):
+    nmc = NestedMonteCarloEIG(likelihood=setup_linear.likelihood, prior=setup_linear.gaussian_prior)
+    plain = nmc.estimate(jax.random.key(4), n_outer=20, n_inner=30, chunk_size=5)
+    chunked = nmc.estimate(
+        jax.random.key(4), n_outer=20, n_inner=30, chunk_size=5, inner_chunk_size=7
+    )
+    assert jnp.allclose(chunked, plain, rtol=1e-6, atol=1e-6)
+
+
 # ─────────────────────────────────────────────────────────
 # Convergence: in LG, NMC -> exact EIG (slow)
 # ─────────────────────────────────────────────────────────

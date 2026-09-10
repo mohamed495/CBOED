@@ -136,6 +136,7 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
         n_inner_theta: int = 500,
         n_inner_marginal: int = 1000,
         chunk_size: int | None = None,
+        inner_chunk_size: int | None = None,
     ) -> Float[Array, ""]:
         """Estimate ``EIG(theta)`` by two-level nested Monte Carlo.
 
@@ -159,9 +160,13 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
             marginal ``log p(y_i)`` (second nesting level, as in standard
             NMC). Default 1000.
         chunk_size : int or None, optional
-            Forwarded to :func:`~cboed.estimators.base.chunked_vmap` for both
-            inner loops, to bound peak memory. ``None`` (default) uses a
-            single ``vmap``.
+        Forwarded to :func:`~cboed.estimators.base.chunked_vmap` for both
+        outer loops, to bound peak memory. ``None`` (default) uses a single
+        ``vmap``.
+        inner_chunk_size : int or None, optional
+        Number of conditional or marginal inner samples evaluated at once.
+        ``None`` (default) evaluates every inner sample in one vectorized
+        call.
 
         Returns
         -------
@@ -186,8 +191,35 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
             eta_outer, keys_y
         )
 
+        if inner_chunk_size is not None and inner_chunk_size <= 0:
+            raise ValueError(f"inner_chunk_size must be > 0, got {inner_chunk_size}")
+
+        def streaming_logmeanexp(n_inner, sample_block, y):
+            """Accumulate a log-mean-exp without materializing every model evaluation."""
+            n_blocks = (n_inner + inner_chunk_size - 1) // inner_chunk_size
+            offsets = jnp.arange(inner_chunk_size)
+
+            def accumulate(block, total):
+                start = block * inner_chunk_size
+                samples = sample_block(block)
+                lls = jax.vmap(lambda e: self.likelihood.log_likelihood(y, e, design))(samples)
+                valid = start + offsets < n_inner
+                block_total = jsp.special.logsumexp(jnp.where(valid, lls, -jnp.inf))
+                return jnp.logaddexp(total, block_total)
+
+            log_total = jax.lax.fori_loop(0, n_blocks, accumulate, -jnp.inf)
+            return log_total - jnp.log(n_inner)
+
         # -- log p(y_i | theta_i): nested MC over eta' | theta_i (Rem. 3.1) --
         def log_lik_given_theta(y, theta, k):
+            if inner_chunk_size is not None:
+
+                def conditional_block(block):
+                    z = jax.random.normal(jax.random.fold_in(k, block), (inner_chunk_size, n_eta))
+                    return mean_fn(theta) + z @ L_pos.T
+
+                return streaming_logmeanexp(n_inner_theta, conditional_block, y)
+
             z = jax.random.normal(k, (n_inner_theta, n_eta))
             etas_cond = mean_fn(theta) + z @ L_pos.T
             lls = jax.vmap(lambda e: self.likelihood.log_likelihood(y, e, design))(etas_cond)
@@ -200,6 +232,15 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
 
         # -- log p(y_i): usual marginal, nested MC over eta ~ prior ---------
         def log_marginal(y, k):
+            if inner_chunk_size is not None:
+                return streaming_logmeanexp(
+                    n_inner_marginal,
+                    lambda block: self.prior_eta.sample(
+                        jax.random.fold_in(k, block), inner_chunk_size
+                    ),
+                    y,
+                )
+
             etas_prior = self.prior_eta.sample(k, n_inner_marginal)
             lls = jax.vmap(lambda e: self.likelihood.log_likelihood(y, e, design))(etas_prior)
             return jsp.special.logsumexp(lls) - jnp.log(n_inner_marginal)

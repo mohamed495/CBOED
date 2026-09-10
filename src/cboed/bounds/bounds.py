@@ -191,9 +191,7 @@ def conservative_bounds(
 
     if eig_full is None:
         full = incremental_bounds(diagnostics, None)
-        # base_lower, base_upper = full.lower, full.upper
-        offset = (full.lower + full.upper)*0.5
-        base_lower, base_upper = offset, offset
+        base_lower, base_upper = full.lower, full.upper
     else:
         base_lower = base_upper = eig_full
 

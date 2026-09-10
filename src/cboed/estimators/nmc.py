@@ -49,6 +49,7 @@ class NestedMonteCarloEIG(EIGEstimator):
         n_outer: int = 1000,
         n_inner: int = 1000,
         chunk_size: int | None = None,
+        inner_chunk_size: int | None = None,
     ) -> Float[Array, ""]:
         """Estimate the EIG by nested Monte Carlo.
 
@@ -67,9 +68,13 @@ class NestedMonteCarloEIG(EIGEstimator):
             Number of inner samples ``theta_j`` used to estimate each
             marginal ``log p(y_i)`` by ``logsumexp``. Default 1000.
         chunk_size : int or None, optional
-            Forwarded to :func:`~cboed.estimators.base.chunked_vmap` for the
-            marginal loop, to bound peak memory. ``None`` (default) uses a
-            single ``vmap``.
+        Forwarded to :func:`~cboed.estimators.base.chunked_vmap` for the
+        outer marginal loop, to bound peak memory. ``None`` (default) uses a
+        single ``vmap``.
+        inner_chunk_size : int or None, optional
+        Number of inner samples evaluated at a time for one outer
+        observation. ``None`` (default) evaluates all ``n_inner`` samples in
+        one vectorized call.
 
         Returns
         -------
@@ -97,10 +102,33 @@ class NestedMonteCarloEIG(EIGEstimator):
         thetas_inner = self.prior.sample(k_inner, n_inner)  # (M, d)
 
         def log_marginal(y):
-            lls = jax.vmap(lambda th: self.likelihood.log_likelihood(y, th, design))(
-                thetas_inner
-            )  # (M,)
-            return jax.scipy.special.logsumexp(lls) - jnp.log(n_inner)
+            if inner_chunk_size is None:
+                lls = jax.vmap(lambda th: self.likelihood.log_likelihood(y, th, design))(
+                    thetas_inner
+                )  # (M,)
+                return jax.scipy.special.logsumexp(lls) - jnp.log(n_inner)
+
+            if inner_chunk_size <= 0:
+                raise ValueError(f"inner_chunk_size must be > 0, got {inner_chunk_size}")
+
+            n_blocks = (n_inner + inner_chunk_size - 1) // inner_chunk_size
+            n_padded = n_blocks * inner_chunk_size
+            padding = n_padded - n_inner
+            thetas_padded = jnp.pad(thetas_inner, ((0, padding), (0, 0)))
+            offsets = jnp.arange(inner_chunk_size)
+
+            def accumulate(block, total):
+                start = block * inner_chunk_size
+                theta_block = jax.lax.dynamic_slice_in_dim(thetas_padded, start, inner_chunk_size)
+                lls = jax.vmap(lambda th: self.likelihood.log_likelihood(y, th, design))(
+                    theta_block
+                )
+                valid = start + offsets < n_inner
+                block_total = jax.scipy.special.logsumexp(jnp.where(valid, lls, -jnp.inf))
+                return jnp.logaddexp(total, block_total)
+
+            log_total = jax.lax.fori_loop(0, n_blocks, accumulate, -jnp.inf)
+            return log_total - jnp.log(n_inner)
 
         log_marg = chunked_vmap(log_marginal, ys, chunk_size=chunk_size)  # (N,)
 

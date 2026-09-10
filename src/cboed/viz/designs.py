@@ -11,6 +11,63 @@ import numpy as np
 from cboed.viz.style import COLORS
 
 
+def plot_selection_frequency(x, frequency, budgets, n_repeats, title=""):
+    """Plot how often each spatial position is selected across repeated runs.
+
+    Parameters
+    ----------
+    x : array_like, shape (n_points,)
+        Spatial grid.
+    frequency : array_like, shape (2, n_budgets, n_points)
+        Selection frequencies for ``i-SNR`` then ``c-SNR`` at every sensor
+        budget.
+    budgets : array_like, shape (n_budgets,)
+        Number of sensors associated with the second axis of ``frequency``.
+    n_repeats : int
+        Number of independent repetitions used to compute the frequencies.
+    title : str, optional
+        Figure title.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Heatmap with one row per strategy-budget pair and a colorbar in
+        ``[0, 1]`` labelled by the selection frequency.
+    """
+    x = np.asarray(x)
+    frequency = np.asarray(frequency)
+    budgets = np.asarray(budgets)
+    if frequency.shape != (2, len(budgets), len(x)):
+        raise ValueError(
+            "frequency must have shape (2, n_budgets, n_points), got "
+            f"{frequency.shape} for {len(budgets)} budgets and {len(x)} points"
+        )
+
+    rows = np.concatenate((frequency[0], frequency[1]), axis=0)
+    labels = [rf"i-SNR, $m={m}$" for m in budgets] + [rf"c-SNR, $m={m}$" for m in budgets]
+    fig, ax = plt.subplots(figsize=(8.2, max(2.4, 0.38 * len(labels) + 1.1)))
+    image = ax.imshow(
+        rows,
+        aspect="auto",
+        cmap="cividis",
+        vmin=0.0,
+        vmax=1.0,
+        extent=(x[0], x[-1], len(labels) - 0.5, -0.5),
+        interpolation="nearest",
+    )
+    ax.set_xlabel("spatial position $x$")
+    ax.set_xlim(0.0, 1.0)
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.grid(False)
+    colorbar = fig.colorbar(image, ax=ax, pad=0.02, ticks=np.linspace(0.0, 1.0, 5))
+    colorbar.set_label(f"selection frequency across {n_repeats} repetitions")
+    if title:
+        ax.set_title(title, fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
 def plot_sensor_positions(x, designs, m=None, ax=None, title=""):
     """Plot the sensor positions selected by each strategy, one row per design.
 
@@ -24,7 +81,7 @@ def plot_sensor_positions(x, designs, m=None, ax=None, title=""):
         Spatial grid.
     designs : dict[str, array_like]
         One entry per design, e.g.
-        ``{"iEIG>= (19)": indices, "cEIG>= (20)": indices, ...}``. Insertion
+        ``{"i-SNR": indices, "c-SNR": indices, ...}``. Insertion
         order of the dict sets the row order; within each row, color encodes
         the rank of selection.
     m : int, optional

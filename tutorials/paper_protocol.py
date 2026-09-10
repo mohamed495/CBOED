@@ -90,6 +90,7 @@ from cboed.inference.linear_model import LinearModel
 from cboed.likelihood.gaussian_likelihood import GaussianLikelihood
 from cboed.optim.greedy_schur import greedy_schur
 from cboed.viz import bounds as vb
+from cboed.viz import designs as vd
 from cboed.viz import fields as vf
 from cboed.viz import spectrum as vs
 from cboed.viz.style import save, use_style
@@ -219,38 +220,43 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
 
 
 def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_inner: int,
-                       nmc_n_inner_theta: int, nmc_n_inner_marginal: int, nmc_chunk_size: int | None = None):
+                       nmc_n_inner_theta: int, nmc_n_inner_marginal: int, nmc_chunk_size: int | None = None,
+                       nmc_inner_chunk_size: int | None = None):
     """``EIG(I_p)`` by nested MC -- used for the conservative bound's ``eig_full``.
 
-    ``nmc_chunk_size``: bounds peak memory to ``chunk_size x n_inner``
-    (instead of ``n_outer x n_inner``) by processing the outer loop in
-    sequential batches -- see ``cboed.estimators.base.chunked_vmap``.
-    Essential on GPU as soon as ``n_outer x n_inner`` (or
-    ``n_inner_theta``/``n_inner_marginal`` in GO) exceeds available memory --
-    this is the cause of the OOM observed with the large default ``--nmc-*``
-    values.
+    ``nmc_chunk_size`` processes outer samples in sequential batches and
+    ``nmc_inner_chunk_size`` limits the number of inner forward solves held
+    at once. Together, they bound the dominant batch to
+    ``nmc_chunk_size x nmc_inner_chunk_size`` rather than
+    ``n_outer x n_inner``.
     """
     prior, model, u, likelihood, inference, go = build_case(lambda_, case)
     if case == "standard":
         est = NestedMonteCarloEIG(likelihood=likelihood, prior=prior)
-        return est.estimate(key, n_outer=nmc_n_outer, n_inner=nmc_n_inner, chunk_size=nmc_chunk_size)
+        return est.estimate(
+            key,
+            n_outer=nmc_n_outer,
+            n_inner=nmc_n_inner,
+            chunk_size=nmc_chunk_size,
+            inner_chunk_size=nmc_inner_chunk_size,
+        )
     est = GoalOrientedNestedMonteCarloEIG(likelihood=likelihood, prior_eta=prior, B=B_QOI, Sigma_xi=SIGMA_XI_QOI)
     return est.estimate(
         key, n_outer=nmc_n_outer, n_inner_theta=nmc_n_inner_theta, n_inner_marginal=nmc_n_inner_marginal,
-        chunk_size=nmc_chunk_size,
+        chunk_size=nmc_chunk_size, inner_chunk_size=nmc_inner_chunk_size,
     )
 
 
-STRATEGY_LABELS = ("iEIG design", "cEIG design")
+STRATEGY_LABELS = ("i-SNR design", "c-SNR design")
 
 
 def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_noise, eig_full_mc, certified, budgets):
-    """Two designs (iEIG, cEIG), four bounds each -- paper protocol Sec. 2.
+    """Two designs (i-SNR, c-SNR), four bounds each -- paper protocol Sec. 2.
 
     Same structure as ``make_figures.py::fig_bounds``: the design chosen by
     optimizing (Sigma_signal, Sigma_Y_given_theta) serves as the reference for
-    the "iEIG design" panel, the one optimizing (Sigma_Y, Sigma_noise) for
-    "cEIG design" -- each displaying its four bounds (inc + cons).
+    the "i-SNR design" panel, the one optimizing (Sigma_Y, Sigma_noise) for
+    "c-SNR design" -- each displaying its four bounds (inc + cons).
 
     Parameters
     ----------
@@ -269,8 +275,8 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
     )
     m_max = max(budgets)
     designs = {
-        "iEIG design": greedy_schur(Sigma_signal, Sigma_Y_given_theta, m_max).design,
-        "cEIG design": greedy_schur(Sigma_Y, Sigma_noise, m_max).design,
+        "i-SNR design": greedy_schur(Sigma_signal, Sigma_Y_given_theta, m_max).design,
+        "c-SNR design": greedy_schur(Sigma_Y, Sigma_noise, m_max).design,
     }
     eig_full_arg = None if eig_full_mc is None else jnp.asarray(eig_full_mc)
     out = {}
@@ -284,7 +290,7 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
             rows["cons_low"].append(float(cons.lower))
             rows["cons_up"].append(float(cons.upper))
         out[label] = {k: np.array(v) for k, v in rows.items()}
-    return out
+    return out, designs
 
 
 # =============================================================================
@@ -294,7 +300,8 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
 
 def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_steps,
                          nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed,
-                         eig_full_mode="certified", nmc_chunk_size=None, n_gradient_chunk_size=None):
+                         eig_full_mode="certified", nmc_chunk_size=None, nmc_inner_chunk_size=None,
+                         n_gradient_chunk_size=None):
     """Repetition loop -- 'once' diagnostics (repeat 0) + bounds per repetition.
 
     Parameters
@@ -310,22 +317,25 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
         m: {label: {k: [] for k in ("inc_low", "inc_up", "cons_low", "cons_up")} for label in STRATEGY_LABELS}
         for m in METHODS
     }
+    selection_counts = np.zeros((2, len(budgets), N), dtype=int)
     once = None  # (Sigma_Y, Sigma_Y_given_theta, methods_diag) from repeat 0 -- for fig 1/2
+    eig_full_mc = None
+    if eig_full_mode == "mc":
+        logger.info("estimating EIG(I_p) by NMC once for lambda=%s, case=%s ...", lambda_, case)
+        eig_full_mc = estimate_eig_full(
+            lambda_, case, jr.fold_in(jr.key(base_seed), 10_000), nmc_n_outer, nmc_n_inner,
+            nmc_n_inner_theta, nmc_n_inner_marginal, nmc_chunk_size=nmc_chunk_size,
+            nmc_inner_chunk_size=nmc_inner_chunk_size,
+        )
 
     for r in range(n_repeats):
         key = jr.fold_in(jr.key(base_seed), r)
-        k_diag, k_eig = jr.split(key)
+        k_diag, _ = jr.split(key)
         logger.info("repeat %d/%d ...", r + 1, n_repeats)
         Sigma_Y, Sigma_Y_given_theta, methods_diag = compute_repeat(
             lambda_, case, k_diag, n_samples, n_gradient, net_steps,
             n_gradient_chunk_size=n_gradient_chunk_size,
         )
-        eig_full_mc = None
-        if eig_full_mode == "mc":
-            eig_full_mc = estimate_eig_full(
-                lambda_, case, k_eig, nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal,
-                nmc_chunk_size=nmc_chunk_size,
-            )
         if r == 0:
             once = (Sigma_Y, Sigma_Y_given_theta, methods_diag)
 
@@ -334,23 +344,29 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
             if diag is None:
                 continue
             Sigma_signal, Sigma_noise = diag
-            res = strategies_for_method(
+            res, designs = strategies_for_method(
                 Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_noise,
-                eig_full_mc, certified=(method == "gradient"), budgets=budgets,
+                eig_full_mc,
+                certified=(method == "gradient" and eig_full_mc is None),
+                budgets=budgets,
             )
             for label, d in res.items():
                 for k, v in d.items():
                     per_method[method][label][k].append(v)
+            if method == "gradient":
+                for strategy, label in enumerate(STRATEGY_LABELS):
+                    for budget_index, m in enumerate(budgets):
+                        selection_counts[strategy, budget_index, np.asarray(designs[label][:m])] += 1
 
     per_method = {
         m: {label: {k: np.stack(v) for k, v in d.items()} for label, d in strat.items()}
         for m, strat in per_method.items()
         if strat[STRATEGY_LABELS[0]]["inc_low"]
     }
-    return once, per_method
+    return once, per_method, selection_counts / n_repeats
 
 
-CACHE_SCHEMA_VERSION = 2  # bump if per_method's structure changes -- invalidates stale caches
+CACHE_SCHEMA_VERSION = 3  # bump if cached protocol outputs change -- invalidates stale caches
 
 
 def cache_path(cache_dir, lambda_, case, eig_full_mode):
@@ -364,9 +380,9 @@ def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
         data = dict(np.load(path, allow_pickle=True))
         once = (data["once_Sigma_Y"], data["once_Sigma_Y_given_theta"], data["once_methods"].item())
         per_method = data["per_method"].item()
-        return once, per_method
+        return once, per_method, data["selection_frequency"]
     logger.info("computing lambda=%s case=%s ...", lambda_, case)
-    once, per_method = compute_lambda_case(lambda_, case, **kwargs)
+    once, per_method, selection_frequency = compute_lambda_case(lambda_, case, **kwargs)
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         path,
@@ -375,8 +391,9 @@ def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
         once_methods=np.array({k: (np.asarray(v[0]), np.asarray(v[1])) if v is not None else None
                                 for k, v in once[2].items()}, dtype=object),
         per_method=np.array(per_method, dtype=object),
+        selection_frequency=selection_frequency,
     )
-    return once, per_method
+    return once, per_method, selection_frequency
 
 
 # =============================================================================
@@ -514,7 +531,26 @@ def fig_spectrum(all_once, budgets, out: Path, fmt: str = "png"):
 
 
 # =============================================================================
-# Figure 3 -- boxplots of the bounds per method
+# Figure 3 -- selection stability across repeated diagnostics
+# =============================================================================
+
+
+def fig_selection_stability(lambda_, case, selection_frequency, budgets, n_repeats, out: Path, fmt: str = "png"):
+    """Selection frequencies of the two gradient-route SNR designs."""
+    save(
+        vd.plot_selection_frequency(
+            X,
+            selection_frequency,
+            budgets,
+            n_repeats,
+            title=rf"Sensor-selection stability -- {case}, $\lambda={lambda_}$",
+        ),
+        out / f"03_selection_stability_{case}_lambda_{lambda_:.2f}.{fmt}",
+    )
+
+
+# =============================================================================
+# Figure 4 -- boxplots of the bounds per method
 # =============================================================================
 
 def _shared_ylim(per_method_all, method, case, pad_frac=0.05, q=1.0):
@@ -548,7 +584,7 @@ def _shared_ylim(per_method_all, method, case, pad_frac=0.05, q=1.0):
 
 def fig_boxplots(per_method_all, budgets, out: Path, fmt: str = "png"):
     """One figure per (lambda, case, method) -- same layout as ``07_bounds_lambda``
-    (2 panels, iEIG design / cEIG design), boxplot at each budget instead of
+    (2 panels, i-SNR design / c-SNR design), boxplot at each budget instead of
     a continuous band.
     """
     for (lambda_, case), per_method in per_method_all.items():
@@ -588,12 +624,15 @@ def main():
     )
     p.add_argument(
         "--nmc-chunk-size", type=int, default=200,
-        help="Bounds the NMC's peak memory (eig-full-mode=mc) to chunk_size x n_inner instead"
-             " of n_outer x n_inner, by processing the outer loop in sequential batches"
-             " (cboed.estimators.base.chunked_vmap). Necessary on GPU as soon as"
-             " n_outer x n_inner (or n_inner_theta/n_inner_marginal in GO) saturates memory --"
-             " this is the cause of the OOM with the default --nmc-* values without chunking."
-             " Increase if the GPU has headroom (faster), decrease if it still OOMs.",
+        help="Outer NMC batch size for eig-full-mode=mc. Together with --nmc-inner-chunk-size,"
+             " bounds the dominant GPU batch. Increase if the GPU has headroom (faster),"
+             " decrease if it still OOMs.",
+    )
+    p.add_argument(
+        "--nmc-inner-chunk-size", type=int, default=128,
+        help="Inner NMC batch size for eig-full-mode=mc. Inner likelihoods are accumulated"
+             " by a stable streaming logsumexp, so GPU memory scales with this value rather"
+             " than --nmc-n-inner (or the GO inner sample counts).",
     )
     p.add_argument(
         "--n-gradient-chunk-size", type=int, default=500,
@@ -637,13 +676,14 @@ def main():
     logger.info("Compute + figures (per lambda x case, as they complete)")
     for lambda_ in args.lambdas:
         for case in args.cases:
-            once, per_method = load_or_compute(
+            once, per_method, selection_frequency = load_or_compute(
                 lambda_, case, cache_dir, args.force,
                 n_repeats=args.n_repeats, n_samples=args.n_samples, n_gradient=args.n_gradient,
                 net_steps=args.net_steps, nmc_n_outer=args.nmc_n_outer, nmc_n_inner=args.nmc_n_inner,
                 nmc_n_inner_theta=args.nmc_n_inner_theta, nmc_n_inner_marginal=args.nmc_n_inner_marginal,
                 budgets=args.budgets, base_seed=args.seed, eig_full_mode=args.eig_full_mode,
-                nmc_chunk_size=args.nmc_chunk_size, n_gradient_chunk_size=args.n_gradient_chunk_size,
+                nmc_chunk_size=args.nmc_chunk_size, nmc_inner_chunk_size=args.nmc_inner_chunk_size,
+                n_gradient_chunk_size=args.n_gradient_chunk_size,
             )
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method
@@ -659,6 +699,9 @@ def main():
             if lambda_ == 0.0 and case == "go":
                 fig_reconstruction_go(once, out, fmt=args.format)
             fig_spectrum(all_once, args.budgets, out, fmt=args.format)
+            fig_selection_stability(
+                lambda_, case, selection_frequency, args.budgets, args.n_repeats, out, fmt=args.format
+            )
             fig_boxplots({(lambda_, case): per_method}, args.budgets, out, fmt=args.format)
     logger.info("-> %s", out.resolve())
 

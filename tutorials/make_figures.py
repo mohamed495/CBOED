@@ -449,8 +449,8 @@ def fig_bounds(lambda_: float, d: dict, out: Path):
     """Two designs, four bounds each -- the paper protocol Sec. 2."""
     dg = as_diagnostics(d)
     strategies = {
-        "iEIG$\\geq$ (19)": (dg.Sigma_signal, dg.Sigma_Y_given_theta),
-        "cEIG$\\geq$ (20)": (dg.Sigma_Y, dg.Sigma_noise),
+        "i-SNR$\\geq$ (19)": (dg.Sigma_signal, dg.Sigma_Y_given_theta),
+        "c-SNR$\\geq$ (20)": (dg.Sigma_Y, dg.Sigma_noise),
     }
     ms = np.arange(1, M_MAX + 1)
     per_strategy, designs, widths = {}, {}, {}

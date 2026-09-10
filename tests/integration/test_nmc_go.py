@@ -72,6 +72,25 @@ def test_go_nmc_is_deterministic_given_key(setup):
     assert jnp.array_equal(a, b)
 
 
+def test_go_nmc_inner_chunking_returns_finite_scalar(setup):
+    est = GoalOrientedNestedMonteCarloEIG(
+        likelihood=setup.likelihood,
+        prior_eta=setup.gaussian_prior,
+        B=setup.B,
+        Sigma_xi=setup.Sigma_xi,
+    )
+    val = est.estimate(
+        jax.random.key(3),
+        n_outer=20,
+        n_inner_theta=30,
+        n_inner_marginal=30,
+        chunk_size=5,
+        inner_chunk_size=7,
+    )
+    assert val.shape == ()
+    assert jnp.isfinite(val)
+
+
 @pytest.mark.slow
 def test_go_nmc_converges_to_laplace_when_linear(setup):
     """Linear model: LaplaceEIG(go) is exact, the goal-oriented MC must converge to it."""

@@ -120,7 +120,7 @@ def plot_two_strategies(ms, per_strategy, title=""):
         Sensor budgets, shared across all designs.
     per_strategy : dict[str, dict]
         One entry per design, e.g.
-        ``{"iEIG>= (19)": {"inc_low":..., "inc_up":..., "cons_low":..., "cons_up":...}}``.
+        ``{"i-SNR": {"inc_low":..., "inc_up":..., "cons_low":..., "cons_up":...}}``.
         Each inner dict is passed as keyword arguments to
         :func:`plot_bounds_vs_m`.
     title : str, optional
@@ -418,7 +418,7 @@ def plot_two_strategies_boxplot(ms, per_strategy, title="", ylim=None):
     ms : array_like, shape (M,)
         Sensor budgets, shared across all designs.
     per_strategy : dict[str, dict]
-        ``{"iEIG>= (19)": {"inc_low": (R, M), ...}}`` -- same keys as
+        ``{"i-SNR": {"inc_low": (R, M), ...}}`` -- same keys as
         :func:`plot_two_strategies`, but arrays of repetitions.
     title : str, optional
         Figure suptitle.
