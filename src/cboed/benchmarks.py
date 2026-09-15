@@ -61,25 +61,67 @@ SENSOR_BUDGETS = tuple(range(1, 16))
 # Sigma_xi = 0 exactly is a singular limit (qoi_fisher_moment diverges,
 # cf. bounds/diagnostics/gradient_based.py): nonzero jitter, chosen small
 # relative to the prior variance (KERNEL_SIGMA**2 = 0.09).
-N_QOI = N // 2
-SIGMA_XI_QOI = 1e-3 * jnp.eye(N_QOI)
 
 
-def qoi_projection(n_qoi: int = N_QOI):
-    """Build the QoI projection ``h : eta -> eta[:n_qoi]`` (first half of the field).
+def build_qoi(qoi_type: str = "nuisance"):
+    """Build the quantity-of-interest map and its noise covariance.
 
     Parameters
     ----------
-    n_qoi : int, default=N_QOI
-        Number of leading field components kept as the quantity of
-        interest.
+    qoi_type : {"nuisance", "energy"}, default="nuisance"
+        Type of quantity of interest.
+
+        - ``"nuisance"``: considers the first half of the field,
+          with ``h(eta) = eta[:N // 2]``.
+        - ``"energy"``: considers the total energy of the field,
+          with ``h(eta) = sum(eta**2)``.
 
     Returns
     -------
-    callable
-        Function mapping a field ``eta`` to its first `n_qoi` components.
+    h : callable
+        Quantity-of-interest map.
+
+        For ``"nuisance"``, ``h`` maps the field to its first
+        ``N // 2`` components.
+
+        For ``"energy"``, ``h`` maps the field to its squared
+        Euclidean norm.
+
+    sigma_xi_qoi : jax.Array
+        Observation noise covariance associated with the QoI.
+        For ``"nuisance"``, this is ``1e-3 * I_{N // 2}``.
+        For ``"energy"``, this is the scalar covariance
+        ``[[1e-3]]``.
+
+    n_qoi : int
+        Dimension of the quantity of interest. It is ``N // 2``
+        for ``"nuisance"`` and ``1`` for ``"energy"``.
+
+    Raises
+    ------
+    ValueError
+        If ``qoi_type`` is not ``"nuisance"`` or ``"energy"``.
     """
-    return lambda eta: eta[:n_qoi]
+    if qoi_type == "nuisance":
+        n_qoi = N // 2
+
+        def h(eta):
+            return eta[:n_qoi]
+
+        sigma_xi_qoi = 1e-3 * jnp.eye(n_qoi)
+
+    elif qoi_type == "energy":
+        n_qoi = 1
+
+        def h(eta):
+            return jnp.asarray([jnp.sum(eta**2)])
+
+        sigma_xi_qoi = jnp.array([[1e-3]])
+
+    else:
+        raise ValueError(f"Unknown qoi_type={qoi_type!r}. Expected 'nuisance' or 'energy'.")
+
+    return h, sigma_xi_qoi, n_qoi
 
 
 def make_prior(n: int = N) -> GaussianPrior:

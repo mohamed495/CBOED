@@ -1,4 +1,4 @@
-r"""Estimate goal-oriented EIG via nested Monte Carlo, ``theta = B eta + xi``.
+r"""Estimate goal-oriented EIG via nested Monte Carlo.
 
 :class:`~cboed.estimators.nmc.NestedMonteCarloEIG` estimates ``EIG(eta)``: its
 ``log p(y|theta)`` is directly ``likelihood.log_likelihood(y, theta, ...)``
@@ -13,10 +13,10 @@ because ``theta`` there **is the forward-model parameter itself**. Here
     \right], \qquad
     p(y|\theta) = E_{\eta|\theta}[p(y|\eta)]
 
-``eta | theta`` is Gaussian in closed form (Rem. 3.1, the same computation as
-:func:`cboed.bounds.diagnostics.sample_based.sample_Sigma_Y_given_theta`) --
-valid only for linear (constant) ``B``, and without it, no closed form exists
-for drawing ``eta | theta``.
+For a linear QoI, ``eta | theta`` is Gaussian in closed form (Rem. 3.1, the
+same computation as :func:`cboed.bounds.diagnostics.sample_based.sample_Sigma_Y_given_theta`).
+For a nonlinear QoI, the conditional samples are obtained by MALA and are
+therefore an approximation of ``pi(eta | theta)``.
 
 ``log p(y)`` remains the usual marginal (independent of ``theta``): the same
 nested estimator as in :mod:`cboed.estimators.nmc`.
@@ -35,6 +35,7 @@ from jaxtyping import Array, Float, Int, PRNGKeyArray
 
 from cboed.bounds.diagnostics.gradient_based import psd_sqrt
 from cboed.estimators.base import EIGEstimator, chunked_vmap
+from cboed.inference.conditional_sampling import sample_eta_given_theta
 
 
 def _eta_given_theta_params(prior_eta, B: Array, Sigma_xi: Array):
@@ -87,8 +88,10 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
         Likelihood ``p(y | eta, design)`` on the **full** field.
     prior_eta : Prior
         Prior on ``eta`` (the full field, not the QoI).
-    B : Float[Array, "n_qoi n_eta"]
-        Jacobian of ``h`` (QoI projection), constant.
+    B : Float[Array, "n_qoi n_eta"] or None
+        Constant Jacobian of a linear QoI. Pass ``None`` for a nonlinear QoI.
+    h : callable or None, optional
+        QoI map. Required when ``B`` is ``None``.
     Sigma_xi : Float[Array, "n_qoi n_qoi"]
         Covariance of the noise ``xi``. Cf. the ``bounds`` modules:
         ``Sigma_xi -> 0`` is a singular limit, do not go there.
@@ -119,14 +122,34 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
         return self._hyperparameters["prior_eta"]
 
     @property
-    def B(self) -> Float[Array, "n_qoi n_eta"]:
-        """Constant Jacobian of the QoI projection ``theta = B eta + xi``."""
+    def B(self) -> Float[Array, "n_qoi n_eta"] | None:
+        """Constant Jacobian of a linear QoI, or ``None`` for a nonlinear QoI."""
         return self._hyperparameters["B"]
+
+    @property
+    def h(self):
+        """QoI map used by the nonlinear conditional sampler."""
+        return self._hyperparameters.get("h")
 
     @property
     def Sigma_xi(self) -> Float[Array, "n_qoi n_qoi"]:
         """Covariance of the QoI noise ``xi``."""
         return self._hyperparameters["Sigma_xi"]
+
+    @property
+    def n_warmup(self) -> int:
+        """MALA warmup transitions for a nonlinear QoI."""
+        return self._hyperparameters.get("n_warmup", 100)
+
+    @property
+    def step_size(self) -> float:
+        """MALA proposal step size for a nonlinear QoI."""
+        return self._hyperparameters.get("step_size", 1e-3)
+
+    @property
+    def thinning(self) -> int:
+        """MALA thinning interval for a nonlinear QoI."""
+        return self._hyperparameters.get("thinning", 1)
 
     def estimate(
         self,
@@ -178,14 +201,20 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
         """
         k_eta, k_xi, k_y, k_theta_inner, k_marg_inner = jax.random.split(key, 5)
 
-        mean_fn, L_pos = _eta_given_theta_params(self.prior_eta, self.B, self.Sigma_xi)
+        if self.B is not None:
+            mean_fn, L_pos = _eta_given_theta_params(self.prior_eta, self.B, self.Sigma_xi)
+        elif self.h is None:
+            raise ValueError("h is required when B is None")
         n_eta = self.prior_eta.mu.shape[0]
 
-        # -- outer loop: eta_i ~ prior, theta_i = B eta_i + xi_i, y_i ~ p(.|eta_i) --
+        # -- outer loop: eta_i ~ prior, theta_i = h(eta_i) + xi_i, y_i ~ p(.|eta_i) --
         eta_outer = self.prior_eta.sample(k_eta, n_outer)
         L_xi = psd_sqrt(self.Sigma_xi)
         z_xi = jax.random.normal(k_xi, (n_outer, self.Sigma_xi.shape[0]))
-        theta_outer = eta_outer @ self.B.T + z_xi @ L_xi.T
+        if self.B is not None:
+            theta_outer = eta_outer @ self.B.T + z_xi @ L_xi.T
+        else:
+            theta_outer = jax.vmap(self.h)(eta_outer) + z_xi @ L_xi.T
         keys_y = jax.random.split(k_y, n_outer)
         y_outer = jax.vmap(lambda eta, k: self.likelihood.sample(k, eta, design, n_samples=1)[0])(
             eta_outer, keys_y
@@ -210,8 +239,24 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
             log_total = jax.lax.fori_loop(0, n_blocks, accumulate, -jnp.inf)
             return log_total - jnp.log(n_inner)
 
-        # -- log p(y_i | theta_i): nested MC over eta' | theta_i (Rem. 3.1) --
+        # -- log p(y_i | theta_i): nested MC over eta' | theta_i --
         def log_lik_given_theta(y, theta, k):
+            if self.B is None:
+                etas_cond = sample_eta_given_theta(
+                    self.prior_eta,
+                    theta,
+                    k,
+                    B=None,
+                    h=self.h,
+                    Sigma_xi=self.Sigma_xi,
+                    n_samples=n_inner_theta,
+                    n_warmup=self.n_warmup,
+                    step_size=self.step_size,
+                    thinning=self.thinning,
+                )
+                lls = jax.vmap(lambda e: self.likelihood.log_likelihood(y, e, design))(etas_cond)
+                return jsp.special.logsumexp(lls) - jnp.log(n_inner_theta)
+
             if inner_chunk_size is not None:
 
                 def conditional_block(block):

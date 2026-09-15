@@ -2,7 +2,7 @@
 r"""Full protocol for the paper -- standard and goal-oriented.
 
 Sweeps ``lambda in {0.0, 0.05, 0.2, 0.75, 1.0}``, standard and goal-oriented
-cases (QoI = first half of the field), and compares three routes to
+cases (the QoI is selected by ``--go-type``), and compares three routes to
 ``Sigma_signal``/``Sigma_noise`` (gradient, affine approximation, affine+network
 approximation). Each repetition redraws every MC quantity with a fresh key
 **and** reselects the design via greedy -- as the NumPy prototype does with
@@ -67,14 +67,12 @@ jax.config.update("jax_enable_x64", False)
 from cboed.benchmarks import (
     DOMAIN,
     N,
-    N_QOI,
     SENSOR_BUDGETS,
     SIGMA_OBS_MATRIX,
-    SIGMA_XI_QOI,
     forward,
     make_model,
     make_prior,
-    qoi_projection,
+    build_qoi,
 )
 from cboed.bounds.base import DiagnosticMatrices
 from cboed.bounds.bounds import conservative_bounds, incremental_bounds
@@ -101,10 +99,26 @@ LAMBDAS_PROTOCOL = (0.0, 0.05, 0.2, 0.75, 1.0)
 CASES = ("standard", "go")
 METHODS = ("gradient", "affine", "affine_nn")
 
-QOI_H = qoi_projection(N_QOI)
-B_QOI = jnp.eye(N)[:N_QOI]
 X = np.linspace(DOMAIN[0], DOMAIN[1], N + 2)[1:-1]
-X_QOI = X[:N_QOI]
+QOI_TYPE = None
+QOI_H = None
+SIGMA_XI_QOI = None
+N_QOI = None
+B_QOI = None
+X_QOI = None
+
+
+def configure_qoi(qoi_type: str):
+    """Configure the protocol QoI after command-line parsing."""
+    global QOI_TYPE, QOI_H, SIGMA_XI_QOI, N_QOI, B_QOI, X_QOI
+    QOI_TYPE = qoi_type
+    QOI_H, SIGMA_XI_QOI, N_QOI = build_qoi(qoi_type)
+    if qoi_type == "nuisance":
+        B_QOI = jnp.eye(N)[:N_QOI]
+        X_QOI = X[:N_QOI]
+    else:
+        B_QOI = None
+        X_QOI = None
 
 
 # =============================================================================
@@ -140,7 +154,9 @@ def paired_samples(u, prior, key, n_samples):
 
 
 def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: int, net_steps: int,
-                    n_gradient_chunk_size: int | None = None):
+                    n_gradient_chunk_size: int | None = None,
+                    qoi_mcmc_warmup: int = 100, qoi_mcmc_step_size: float = 1e-3,
+                    qoi_mcmc_thinning: int = 1):
     """``(Sigma_Y, Sigma_Y_given_theta, {method: (Sigma_signal, Sigma_noise) | None})``.
 
     ``n_gradient_chunk_size`` : bounds the gradient route's peak memory
@@ -166,9 +182,15 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
         )
     else:
         Sigma_Y_given_theta = sample_Sigma_Y_given_theta(
-            u, prior, B_QOI, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_Yth, n_samples
+            u, prior, B_QOI, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_Yth, n_samples,
+            h=QOI_H if QOI_TYPE == "energy" else None,
+            n_warmup=qoi_mcmc_warmup, step_size=qoi_mcmc_step_size,
+            thinning=qoi_mcmc_thinning,
         )
-        theta_for_noise = eta[:, :N_QOI]
+        if QOI_TYPE == "energy":
+            theta_for_noise = jax.vmap(QOI_H)(eta)
+        else:
+            theta_for_noise = eta[:, :N_QOI]
         Sigma_signal_g, Sigma_noise_g = gradient_diagnostics(
             u, QOI_H, prior, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_grad, n_gradient,
             chunk_size=n_gradient_chunk_size,
@@ -221,7 +243,9 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
 
 def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_inner: int,
                        nmc_n_inner_theta: int, nmc_n_inner_marginal: int, nmc_chunk_size: int | None = None,
-                       nmc_inner_chunk_size: int | None = None):
+                       nmc_inner_chunk_size: int | None = None,
+                       qoi_mcmc_warmup: int = 100, qoi_mcmc_step_size: float = 1e-3,
+                       qoi_mcmc_thinning: int = 1):
     """``EIG(I_p)`` by nested MC -- used for the conservative bound's ``eig_full``.
 
     ``nmc_chunk_size`` processes outer samples in sequential batches and
@@ -240,7 +264,11 @@ def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_in
             chunk_size=nmc_chunk_size,
             inner_chunk_size=nmc_inner_chunk_size,
         )
-    est = GoalOrientedNestedMonteCarloEIG(likelihood=likelihood, prior_eta=prior, B=B_QOI, Sigma_xi=SIGMA_XI_QOI)
+    est = GoalOrientedNestedMonteCarloEIG(
+        likelihood=likelihood, prior_eta=prior, B=B_QOI, h=QOI_H,
+        Sigma_xi=SIGMA_XI_QOI, n_warmup=qoi_mcmc_warmup,
+        step_size=qoi_mcmc_step_size, thinning=qoi_mcmc_thinning,
+    )
     return est.estimate(
         key, n_outer=nmc_n_outer, n_inner_theta=nmc_n_inner_theta, n_inner_marginal=nmc_n_inner_marginal,
         chunk_size=nmc_chunk_size, inner_chunk_size=nmc_inner_chunk_size,
@@ -301,7 +329,8 @@ def strategies_for_method(Sigma_Y, Sigma_Y_given_theta, Sigma_signal, Sigma_nois
 def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_steps,
                          nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed,
                          eig_full_mode="certified", nmc_chunk_size=None, nmc_inner_chunk_size=None,
-                         n_gradient_chunk_size=None):
+                         n_gradient_chunk_size=None, qoi_mcmc_warmup=100,
+                         qoi_mcmc_step_size=1e-3, qoi_mcmc_thinning=1):
     """Repetition loop -- 'once' diagnostics (repeat 0) + bounds per repetition.
 
     Parameters
@@ -326,6 +355,8 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
             lambda_, case, jr.fold_in(jr.key(base_seed), 10_000), nmc_n_outer, nmc_n_inner,
             nmc_n_inner_theta, nmc_n_inner_marginal, nmc_chunk_size=nmc_chunk_size,
             nmc_inner_chunk_size=nmc_inner_chunk_size,
+            qoi_mcmc_warmup=qoi_mcmc_warmup, qoi_mcmc_step_size=qoi_mcmc_step_size,
+            qoi_mcmc_thinning=qoi_mcmc_thinning,
         )
 
     for r in range(n_repeats):
@@ -335,6 +366,8 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
         Sigma_Y, Sigma_Y_given_theta, methods_diag = compute_repeat(
             lambda_, case, k_diag, n_samples, n_gradient, net_steps,
             n_gradient_chunk_size=n_gradient_chunk_size,
+            qoi_mcmc_warmup=qoi_mcmc_warmup, qoi_mcmc_step_size=qoi_mcmc_step_size,
+            qoi_mcmc_thinning=qoi_mcmc_thinning,
         )
         if r == 0:
             once = (Sigma_Y, Sigma_Y_given_theta, methods_diag)
@@ -366,11 +399,15 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
     return once, per_method, selection_counts / n_repeats
 
 
-CACHE_SCHEMA_VERSION = 3  # bump if cached protocol outputs change -- invalidates stale caches
+CACHE_SCHEMA_VERSION = 4  # bump if cached protocol outputs change -- invalidates stale caches
 
 
-def cache_path(cache_dir, lambda_, case, eig_full_mode):
-    return cache_dir / f"protocol_v{CACHE_SCHEMA_VERSION}_{eig_full_mode}_lambda_{lambda_:.2f}_{case}.npz"
+def cache_path(cache_dir, lambda_, case, eig_full_mode, qoi_type=None):
+    qoi_type = QOI_TYPE if qoi_type is None else qoi_type
+    return cache_dir / (
+        f"protocol_v{CACHE_SCHEMA_VERSION}_{qoi_type}_{eig_full_mode}_"
+        f"lambda_{lambda_:.2f}_{case}.npz"
+    )
 
 
 def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
@@ -462,7 +499,7 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 5, fmt: st
     post = mu_post + jr.normal(k_post, (200, N)) @ np.linalg.cholesky(
         np.asarray(Gamma_post) + 1e-10 * np.eye(N)
     ).T
-    qoi_span = (float(X[0]), float(X[N_QOI - 1]))
+    qoi_span = None if QOI_TYPE == "energy" else (float(X[0]), float(X[N_QOI - 1]))
 
     save(
         vf.plot_reconstruction(
@@ -629,6 +666,14 @@ def main():
              " decrease if it still OOMs.",
     )
     p.add_argument(
+        "--go-type",
+        choices=("nuisance", "energy"),
+        default="nuisance",
+    )
+    p.add_argument("--qoi-mcmc-warmup", type=int, default=100)
+    p.add_argument("--qoi-mcmc-step-size", type=float, default=1e-3)
+    p.add_argument("--qoi-mcmc-thinning", type=int, default=1)
+    p.add_argument(
         "--nmc-inner-chunk-size", type=int, default=128,
         help="Inner NMC batch size for eig-full-mode=mc. Inner likelihoods are accumulated"
              " by a stable streaming logsumexp, so GPU memory scales with this value rather"
@@ -658,6 +703,7 @@ def main():
              " DEBUG adds noisier third-party (JAX/matplotlib) messages too.",
     )
     args = p.parse_args()
+    configure_qoi(args.go_type)
 
     use_style()
     out, cache_dir = Path(args.out), Path(args.cache)
@@ -684,6 +730,9 @@ def main():
                 budgets=args.budgets, base_seed=args.seed, eig_full_mode=args.eig_full_mode,
                 nmc_chunk_size=args.nmc_chunk_size, nmc_inner_chunk_size=args.nmc_inner_chunk_size,
                 n_gradient_chunk_size=args.n_gradient_chunk_size,
+                qoi_mcmc_warmup=args.qoi_mcmc_warmup,
+                qoi_mcmc_step_size=args.qoi_mcmc_step_size,
+                qoi_mcmc_thinning=args.qoi_mcmc_thinning,
             )
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method
