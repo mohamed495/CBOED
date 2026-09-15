@@ -56,17 +56,52 @@ def test_conditioned_prior_uses_schur_complement():
 
 
 def test_conditioned_prior_has_inhomogeneous_conditional_mean():
+    mu = jnp.zeros(3)
+    mu_boundary = jnp.array([0.5, 0.25])
+    boundary_values = jnp.array([1.0, -2.0])
+
     gp = GaussianProcess(
         kernel.Gaussian(length_scale=0.5, sigma=1.0),
-        mu=jnp.zeros(3),
-        boundary_values=jnp.array([1.0, -2.0]),
+        mu=mu,
+        mu_boundary=mu_boundary,
+        boundary_values=boundary_values,
         jitter=0.0,
     )
 
     x_full = jnp.linspace(0.0, 1.0, 5)
     Sigma_full = gp.kernel(x_full, x_full)
-    Sigma_ie = Sigma_full[1:-1, jnp.array([0, 4])]
-    Sigma_ee = Sigma_full[jnp.ix_(jnp.array([0, 4]), jnp.array([0, 4]))]
-    expected = Sigma_ie @ jnp.linalg.solve(Sigma_ee, jnp.array([1.0, -2.0]))
+
+    boundary = jnp.array([0, 4])
+    Sigma_ie = Sigma_full[1:-1, boundary]
+    Sigma_ee = Sigma_full[jnp.ix_(boundary, boundary)]
+
+    expected = mu + Sigma_ie @ jnp.linalg.solve(
+        Sigma_ee,
+        boundary_values - mu_boundary,
+    )
 
     assert jnp.allclose(gp.mu, expected)
+
+
+def test_boundary_mean_does_not_change_conditional_covariance():
+    kernel_ = kernel.Gaussian(length_scale=0.5, sigma=1.0)
+    mu = jnp.zeros(3)
+    boundary_values = jnp.array([1.0, -2.0])
+
+    gp_zero = GaussianProcess(
+        kernel=kernel_,
+        mu=mu,
+        mu_boundary=jnp.zeros(2),
+        boundary_values=boundary_values,
+        jitter=0.0,
+    )
+
+    gp_nonzero = GaussianProcess(
+        kernel=kernel_,
+        mu=mu,
+        mu_boundary=jnp.array([10.0, -5.0]),
+        boundary_values=boundary_values,
+        jitter=0.0,
+    )
+
+    assert jnp.allclose(gp_zero.Sigma, gp_nonzero.Sigma)

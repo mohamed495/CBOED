@@ -62,6 +62,7 @@ class GaussianProcess:
         domain: tuple[float, float] = (0.0, 1.0),
         jitter: float = 1e-8,
         boundary_values: Float[Array, "2"] | None = None,
+        mu_boundary: Float[Array, "2"] | None = None,
     ) -> None:
         if jitter < 0:
             raise ValueError(f"jitter must be >= 0, got {jitter}")
@@ -72,10 +73,21 @@ class GaussianProcess:
                     "boundary_values must contain exactly the left and right "
                     f"boundary values, got shape {boundary_values.shape}"
                 )
+            if mu_boundary is None:
+                mu_boundary = jnp.zeros(2)
+            else:
+                mu_boundary = jnp.asarray(mu_boundary)
+
+                if mu_boundary.shape != (2,):
+                    raise ValueError(
+                        "mu_boundary must contain exactly the left and right "
+                        f"boundary means, got shape {mu_boundary.shape}"
+                    )
         self.kernel = kernel
         self.domain = domain
         self.jitter = jitter
         self.boundary_values = boundary_values
+        self.mu_boundary = mu_boundary
 
         if boundary_values is None:
             self.mu = mu
@@ -85,7 +97,9 @@ class GaussianProcess:
             x_full = jnp.linspace(domain[0], domain[1], len(mu) + 2)
             Sigma_full = self._build_covariance(x_full)
             self.x = x_full[1:-1]
-            self.mu, self.Sigma = self._condition_on_boundaries(mu, Sigma_full, boundary_values)
+            self.mu, self.Sigma = self._condition_on_boundaries(
+                mu, mu_boundary, Sigma_full, boundary_values
+            )
 
     def _build_covariance(self, x: Float[Array, " n_param"]) -> Float[Array, "n_param n_param"]:
         """Evaluate the kernel Gram matrix on `x` and add the relative nugget.
@@ -108,6 +122,7 @@ class GaussianProcess:
     @staticmethod
     def _condition_on_boundaries(
         mu: Float[Array, " n_interior"],
+        mu_boundary: Float[Array, "2"],
         Sigma: Float[Array, " n_full n_full"],
         boundary_values: Float[Array, "2"],
     ) -> tuple[Float[Array, " n_interior"], Float[Array, " n_interior n_interior"]]:
@@ -140,7 +155,7 @@ class GaussianProcess:
 
         correction = Sigma_ie @ jnp.linalg.solve(Sigma_ee, Sigma_ie.T)
         conditional_covariance = Sigma_ii - correction
-        conditional_mean = mu + Sigma_ie @ jnp.linalg.solve(Sigma_ee, boundary_values)
+        conditional_mean = mu + Sigma_ie @ jnp.linalg.solve(Sigma_ee, boundary_values - mu_boundary)
         return conditional_mean, conditional_covariance
 
 
