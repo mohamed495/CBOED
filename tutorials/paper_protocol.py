@@ -418,16 +418,23 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
 CACHE_SCHEMA_VERSION = 4  # bump if cached protocol outputs change -- invalidates stale caches
 
 
-def cache_path(cache_dir, lambda_, case, eig_full_mode, qoi_type=None):
+def cache_path(cache_dir, lambda_, case, eig_full_mode, budgets, qoi_type=None):
     qoi_type = QOI_TYPE if qoi_type is None else qoi_type
+    budget_key = "-".join(str(int(budget)) for budget in budgets)
     return cache_dir / (
         f"protocol_v{CACHE_SCHEMA_VERSION}_{qoi_type}_{eig_full_mode}_"
-        f"lambda_{lambda_:.2f}_{case}.npz"
+        f"budgets_{budget_key}_lambda_{lambda_:.2f}_{case}.npz"
     )
 
 
 def load_or_compute(lambda_, case, cache_dir, force, **kwargs):
-    path = cache_path(cache_dir, lambda_, case, kwargs.get("eig_full_mode", "certified"))
+    path = cache_path(
+        cache_dir,
+        lambda_,
+        case,
+        kwargs.get("eig_full_mode", "certified"),
+        kwargs["budgets"],
+    )
     if path.exists() and not force:
         logger.info("cache  %s", path.name)
         data = dict(np.load(path, allow_pickle=True))
