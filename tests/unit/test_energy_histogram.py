@@ -14,11 +14,13 @@ def test_energy_posterior_histogram_overlays_designs():
         theta_true=1.5,
         prior_theta_samples=np.linspace(0.5, 3.0, 20),
         bins=8,
+        x_max=2.5,
     )
 
     try:
         assert len(figure.axes) == 1
         assert all(axis.get_xlabel() == r"$\theta = \|\eta\|^2$" for axis in figure.axes)
+        assert figure.axes[0].get_xlim() == (0.0, 2.5)
     finally:
         plt.close(figure)
 

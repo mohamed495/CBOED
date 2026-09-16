@@ -539,7 +539,8 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 5, fmt: st
 
 
 def fig_histogram_energy_posterior(
-    once_go_lambda0, out: Path, m_design: int = 5, n_samples: int = 10000, fmt: str = "png"
+    once_go_lambda0, out: Path, m_design: int = 5, n_samples: int = 10000,
+    histogram_x_max: float | None = 200.0, fmt: str = "png"
 ):
     """Plot ``theta | Y_m`` for the incremental and conservative GO designs.
 
@@ -586,6 +587,7 @@ def fig_histogram_energy_posterior(
             theta_samples,
             float(jnp.sum(eta_true**2)),
             prior_theta_samples=prior_theta,
+            x_max=histogram_x_max,
         ),
         out / f"04_histogram_energy_posterior_lambda_0.00_m_{m_design:02d}.{fmt}",
     )
@@ -756,6 +758,10 @@ def main():
     p.add_argument("--qoi-mcmc-thinning", type=int, default=1)
     p.add_argument("--n-histogram", type=int, default=10000)
     p.add_argument(
+        "--histogram-x-max", type=float, default=200.0,
+        help="Upper display limit for the energy histogram axis; samples are not truncated.",
+    )
+    p.add_argument(
         "--qoi-method", choices=("mala", "rejection"), default="mala",
         help="Conditional sampler for nonlinear QoIs; energy uses rejection.",
     )
@@ -847,7 +853,9 @@ def main():
                 fig_reconstruction_go(once, out, fmt=args.format)
                 fig_histogram_energy_posterior(
                     once, out, m_design=max(args.budgets),
-                    n_samples=args.n_histogram, fmt=args.format,
+                    n_samples=args.n_histogram,
+                    histogram_x_max=args.histogram_x_max,
+                    fmt=args.format,
                 )
             fig_spectrum(all_once, args.budgets, out, fmt=args.format)
             fig_selection_stability(

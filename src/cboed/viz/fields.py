@@ -250,6 +250,7 @@ def plot_energy_posterior_histograms(
     bins=60,
     show_density=True,
     overlay=True,
+    x_max=None,
 ):
     """Plot posterior energy histograms for sensor designs.
 
@@ -268,6 +269,9 @@ def plot_energy_posterior_histograms(
     overlay : bool, optional
         Overlay all designs on one axes when true. When false, use one panel
         per design.
+    x_max : float, optional
+        Upper display limit for the energy axis. Samples remain unchanged;
+        this only zooms the plot.
 
     Returns
     -------
@@ -376,6 +380,10 @@ def plot_energy_posterior_histograms(
     for ax in axes:
         ax.set_xlabel(r"$\theta = \|\eta\|^2$")
         ax.set_ylabel("density")
+        if x_max is not None:
+            if x_max <= 0:
+                raise ValueError(f"x_max must be > 0, got {x_max}")
+            ax.set_xlim(0.0, x_max)
         ax.legend(fontsize=8)
     fig.tight_layout()
     return fig
