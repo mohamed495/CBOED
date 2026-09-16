@@ -57,10 +57,9 @@ KERNEL_SIGMA = 0.3
 LAMBDAS = (0.0, 0.25, 0.5, 1.0)
 SENSOR_BUDGETS = tuple(range(1, 16))
 
-# -- goal-oriented: QoI = first half of the field ---------------------------
-# Sigma_xi = 0 exactly is a singular limit (qoi_fisher_moment diverges,
-# cf. bounds/diagnostics/gradient_based.py): nonzero jitter, chosen small
-# relative to the prior variance (KERNEL_SIGMA**2 = 0.09).
+# -- goal-oriented QoIs ------------------------------------------------------
+# The energy QoI is noiseless: its conditional law is sampled by rejection
+# from a tolerance band around the level set ``||eta||**2 = theta``.
 
 
 def build_qoi(qoi_type: str = "nuisance"):
@@ -90,8 +89,7 @@ def build_qoi(qoi_type: str = "nuisance"):
     sigma_xi_qoi : jax.Array
         Observation noise covariance associated with the QoI.
         For ``"nuisance"``, this is ``1e-3 * I_{N // 2}``.
-        For ``"energy"``, this is the scalar covariance
-        ``[[1e-3]]``.
+        For ``"energy"``, this is the zero covariance ``[[0.0]]``.
 
     n_qoi : int
         Dimension of the quantity of interest. It is ``N // 2``
@@ -116,7 +114,7 @@ def build_qoi(qoi_type: str = "nuisance"):
         def h(eta):
             return jnp.asarray([jnp.sum(eta**2)])
 
-        sigma_xi_qoi = jnp.array([[1e-3]])
+        sigma_xi_qoi = jnp.zeros((1, 1))
 
     else:
         raise ValueError(f"Unknown qoi_type={qoi_type!r}. Expected 'nuisance' or 'energy'.")

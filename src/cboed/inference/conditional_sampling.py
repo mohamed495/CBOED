@@ -104,7 +104,44 @@ def _mala_samples(
     return chain(initial, chain_key)
 
 
-@partial(jax.jit, static_argnums=(0, 4, 6, 7, 8, 9))
+def _rejection_samples(
+    prior_eta: Prior,
+    h,
+    theta: Array,
+    key: PRNGKeyArray,
+    n_samples: int,
+    delta_theta: float,
+    max_trials: int,
+) -> Array:
+    """Sample from the prior restricted to a QoI tolerance band.
+
+    The returned samples approximate the noiseless conditional law. If a
+    sample has not been accepted after ``max_trials`` batches, its entries are
+    set to ``NaN`` so an insufficient rejection budget cannot silently bias a
+    downstream estimate.
+    """
+    if delta_theta <= 0:
+        raise ValueError(f"delta_theta must be > 0, got {delta_theta}")
+    if max_trials <= 0:
+        raise ValueError(f"max_trials must be > 0, got {max_trials}")
+
+    initial = prior_eta.sample(jax.random.fold_in(key, 0), n_samples)
+    accepted = jnp.zeros((n_samples,), dtype=bool)
+
+    def trial(index, state):
+        samples, accepted = state
+        candidates = prior_eta.sample(jax.random.fold_in(key, index + 1), n_samples)
+        distances = jax.vmap(lambda eta: jnp.linalg.norm(h(eta) - theta))(candidates)
+        newly_accepted = distances <= delta_theta
+        update = newly_accepted & ~accepted
+        samples = jnp.where(update[:, None], candidates, samples)
+        return samples, accepted | newly_accepted
+
+    samples, accepted = jax.lax.fori_loop(0, max_trials, trial, (initial, accepted))
+    return jnp.where(accepted[:, None], samples, jnp.nan)
+
+
+@partial(jax.jit, static_argnums=(0, 4, 6, 7, 8, 9, 10, 11, 12))
 def sample_eta_given_theta(
     prior_eta: Prior,
     theta: Array,
@@ -116,6 +153,9 @@ def sample_eta_given_theta(
     n_warmup: int = 100,
     step_size: float = 1e-3,
     thinning: int = 1,
+    method: str = "mala",
+    delta_theta: float = 1e-2,
+    max_trials: int = 1000,
 ) -> Array:
     r"""Sample ``eta | theta`` for a linear or nonlinear QoI.
 
@@ -142,6 +182,13 @@ def sample_eta_given_theta(
         MALA proposal step size. Used only for nonlinear QoIs.
     thinning : int, optional
         Number of MALA transitions between returned samples.
+    method : {"mala", "rejection"}, optional
+        Nonlinear conditional sampler. ``"rejection"`` uses prior draws in
+        a tolerance band and requires zero QoI noise.
+    delta_theta : float, optional
+        Radius of the QoI tolerance band for rejection sampling.
+    max_trials : int, optional
+        Maximum number of vectorized prior proposal batches.
 
     Returns
     -------
@@ -150,8 +197,9 @@ def sample_eta_given_theta(
 
     Notes
     -----
-    The linear branch is an exact Gaussian conditional draw. The nonlinear
-    branch is an approximate MALA draw from the specified conditional target.
+    The linear branch is an exact Gaussian conditional draw. MALA is an
+    approximate draw from the noisy conditional target. Rejection is an
+    approximate draw from the prior restricted to a tolerance band.
     """
     if Sigma_xi is None:
         raise ValueError("Sigma_xi is required")
@@ -159,6 +207,12 @@ def sample_eta_given_theta(
         return _sample_linear(prior_eta, theta, B, Sigma_xi, key, n_samples)
     if h is None:
         raise ValueError("h is required when B is None")
+    if method == "rejection":
+        return _rejection_samples(
+            prior_eta, h, theta, key, n_samples, delta_theta, max_trials
+        )
+    if method != "mala":
+        raise ValueError(f"Unknown conditional sampling method: {method!r}")
     return _mala_samples(
         prior_eta, h, Sigma_xi, theta, key, n_samples, n_warmup, step_size, thinning
     )

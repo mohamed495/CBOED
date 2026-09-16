@@ -151,6 +151,21 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
         """MALA thinning interval for a nonlinear QoI."""
         return self._hyperparameters.get("thinning", 1)
 
+    @property
+    def conditional_method(self) -> str:
+        """Conditional sampler used for a nonlinear QoI."""
+        return self._hyperparameters.get("conditional_method", "mala")
+
+    @property
+    def delta_theta(self) -> float:
+        """QoI tolerance used by the rejection sampler."""
+        return self._hyperparameters.get("delta_theta", 1e-2)
+
+    @property
+    def max_trials(self) -> int:
+        """Maximum rejection proposal batches per conditional draw."""
+        return self._hyperparameters.get("max_trials", 1000)
+
     def estimate(
         self,
         key: PRNGKeyArray,
@@ -253,6 +268,9 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
                     n_warmup=self.n_warmup,
                     step_size=self.step_size,
                     thinning=self.thinning,
+                    method=self.conditional_method,
+                    delta_theta=self.delta_theta,
+                    max_trials=self.max_trials,
                 )
                 lls = jax.vmap(lambda e: self.likelihood.log_likelihood(y, e, design))(etas_cond)
                 return jsp.special.logsumexp(lls) - jnp.log(n_inner_theta)

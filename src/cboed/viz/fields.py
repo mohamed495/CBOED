@@ -116,6 +116,7 @@ def plot_reconstruction(
     posterior_samples,
     truth,
     sensors=None,
+    sensor_order=None,
     laplace_warning=False,
     n_show=30,
     qoi_span=None,
@@ -141,6 +142,9 @@ def plot_reconstruction(
     sensors : array_like, shape (m,), optional
         Indices into `x` of the selected sensors, marked on the axis as a
         rug of ticks (see :func:`_mark_sensors_rug`).
+    sensor_order : array_like, shape (m,), optional
+        Selection rank to display above each sensor. The order must correspond
+        to `sensors`; for a greedy design this is ``1, 2, ..., m``.
     laplace_warning : bool, optional
         If ``True``, annotate that the posterior is the Laplace
         approximation linearized at ``mu_prior`` -- exact only if the model
@@ -182,6 +186,30 @@ def plot_reconstruction(
     ax.plot(x, posterior_mean, color=COLORS["posterior"], lw=2.0, zorder=3)
     ax.plot(x, np.asarray(truth), color=COLORS["truth"], lw=2.2, zorder=4)
 
+    if sensor_order is not None:
+        if sensors is None:
+            raise ValueError("sensor_order requires sensors")
+        sensors = np.asarray(sensors)
+        sensor_order = np.asarray(sensor_order)
+        if sensor_order.shape != sensors.shape:
+            raise ValueError("sensor_order and sensors must have the same shape")
+        y_min, y_max = ax.get_ylim()
+        label_offset = 0.035 * (y_max - y_min)
+        label_base = y_min + 0.06 * (y_max - y_min)
+        for label_index, (sensor, rank) in enumerate(zip(sensors, sensor_order, strict=True)):
+            ax.text(
+                x[sensor],
+                label_base + (label_index % 3) * label_offset,
+                str(rank),
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                fontweight="bold",
+                color=COLORS["sensors"],
+                bbox={"facecolor": "white", "edgecolor": "none", "pad": 0.8, "alpha": 0.8},
+                clip_on=True,
+            )
+
     handles = [
         Line2D([0], [0], color=COLORS["prior"], lw=1.5, label="prior (realizations)"),
         Line2D([0], [0], color=COLORS["posterior"], lw=1.5, label="posterior (realizations)"),
@@ -211,6 +239,85 @@ def plot_reconstruction(
 
     ax.set_xlabel("$x$")
     ax.legend(handles=handles, fontsize=8, ncol=2)
+    fig.tight_layout()
+    return fig
+
+
+def plot_energy_posterior_histograms(
+    theta_samples_by_design,
+    theta_true,
+    prior_theta_samples=None,
+    bins=60,
+    show_density=True,
+):
+    """Plot posterior energy histograms for two sensor designs.
+
+    Parameters
+    ----------
+    theta_samples_by_design : dict[str, array_like]
+        One-dimensional samples of ``||eta||**2``, keyed by design label.
+    theta_true : float
+        Energy of the latent field used to generate the common observation.
+    prior_theta_samples : array_like, optional
+        Prior energy samples, overlaid for reference in both panels.
+    bins : int, optional
+        Number of histogram bins.
+    show_density : bool, optional
+        Overlay a Gaussian-kernel density estimate on each histogram.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure with one panel per design.
+
+    Notes
+    -----
+    This figure visualizes ``theta | Y_m``. At ``lambda=0`` the posterior
+    samples of ``eta | Y_m`` are exact Gaussian draws, while the energy
+    transformation itself is nonlinear and generally non-Gaussian.
+    """
+    labels = list(theta_samples_by_design)
+    if not labels:
+        raise ValueError("theta_samples_by_design must not be empty")
+    arrays = [np.asarray(theta_samples_by_design[label]).ravel() for label in labels]
+    if any(not np.all(np.isfinite(samples)) for samples in arrays):
+        raise ValueError("energy posterior samples must contain finite values")
+    finite = arrays
+
+    all_samples = np.concatenate(finite)
+    if prior_theta_samples is not None:
+        prior_theta_samples = np.asarray(prior_theta_samples).ravel()
+        all_samples = np.concatenate([all_samples, prior_theta_samples])
+    edges = np.histogram_bin_edges(all_samples, bins=bins)
+    x_grid = np.linspace(0.0, max(float(all_samples.max()), float(theta_true)) * 1.05, 400)
+
+    def kde(samples):
+        bandwidth = 1.06 * np.std(samples) * samples.size ** (-1 / 5)
+        bandwidth = max(float(bandwidth), np.finfo(float).eps)
+        scaled = (x_grid[:, None] - samples[None, :]) / bandwidth
+        return np.mean(np.exp(-0.5 * scaled**2), axis=1) / (bandwidth * np.sqrt(2 * np.pi))
+
+    fig, axes = plt.subplots(1, len(labels), figsize=(4.2 * len(labels), 3.2), squeeze=False)
+    for ax, label, samples in zip(axes[0], labels, finite, strict=True):
+        if prior_theta_samples is not None:
+            ax.hist(
+                prior_theta_samples,
+                bins=edges,
+                density=True,
+                color=COLORS["prior"],
+                alpha=0.22,
+                label="prior",
+            )
+        ax.hist(samples, bins=edges, density=True, color=COLORS["posterior"], alpha=0.72,
+                label="posterior")
+        if show_density:
+            ax.plot(x_grid, kde(samples), color=COLORS["exact"], lw=2.0, label="smoothed density")
+        ax.axvline(theta_true, color=COLORS["truth"], ls="--", lw=1.8,
+                   label=r"$\theta_{\rm true}$")
+        ax.set_title(label)
+        ax.set_xlabel(r"$\theta = \|\eta\|^2$")
+        ax.set_ylabel("density")
+        ax.legend(fontsize=8)
     fig.tight_layout()
     return fig
 

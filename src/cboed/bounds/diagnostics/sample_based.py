@@ -20,9 +20,9 @@ error of the kind that threatens ``E[X X^T] - \bar{X}\bar{X}^T``. Cost:
 
 ``Sigma_{Y|theta}`` follows the same form with ``eta, eta'`` **conditionally
 independent given theta** (27): ``eta ~ pi_eta``, ``theta ~ pi_{theta|eta}``,
-``eta' ~ pi_{eta|theta}``. The last draw is the paper's bottleneck -- it
-generally requires MCMC. Rem. 3.1 gives it in closed form when ``h`` is
-linear.
+``eta' ~ pi_{eta|theta}``. The last draw is the paper's bottleneck. Rem. 3.1
+gives it in closed form when ``h`` is linear; for the noiseless energy QoI,
+the implementation uses rejection from a prior tolerance band.
 
 Notes
 -----
@@ -113,7 +113,7 @@ def sample_Sigma_Y(
     return Sigma_obs + _paired_covariance(diffs)
 
 
-@partial(jax.jit, static_argnums=(0, 1, 6, 7, 8, 9, 10))
+@partial(jax.jit, static_argnums=(0, 1, 6, 7, 8, 9, 10, 11, 12, 13))
 @jaxtyped(typechecker=beartype)
 def sample_Sigma_Y_given_theta(
     u,
@@ -127,6 +127,9 @@ def sample_Sigma_Y_given_theta(
     n_warmup: int = 100,
     step_size: float = 1e-3,
     thinning: int = 1,
+    method: str = "mala",
+    delta_theta: float = 1e-2,
+    max_trials: int = 1000,
 ) -> Float[Array, "n_obs n_obs"]:
     r"""Compute ``Sigma_{Y|theta} = Sigma_obs + E[Cov(u(eta)|theta)]`` -- (27) via Rem. 3.1.
 
@@ -150,14 +153,20 @@ def sample_Sigma_Y_given_theta(
     n_samples : int
         Number of **pairs**. Cost: ``2 * n_samples`` evaluations of ``u``.
     h : callable or None, optional
-        QoI map for the nonlinear MALA branch. When ``None``, the exact
-        Gaussian conditional determined by ``B`` is used.
+        QoI map for a nonlinear branch. When ``None``, the exact Gaussian
+        conditional determined by ``B`` is used.
     n_warmup : int, optional
         MALA warmup transitions for a nonlinear QoI.
     step_size : float, optional
         MALA proposal step size for a nonlinear QoI.
     thinning : int, optional
         Number of MALA transitions between returned samples.
+    method : {"mala", "rejection"}, optional
+        Nonlinear conditional sampling method.
+    delta_theta : float, optional
+        QoI tolerance for rejection sampling.
+    max_trials : int, optional
+        Maximum number of rejection proposal batches.
 
     Returns
     -------
@@ -168,7 +177,8 @@ def sample_Sigma_Y_given_theta(
     -----
     With ``h=None``, the Kalman gain and posterior covariance are factorized
     exactly as in Rem. 3.1. With a nonlinear ``h``, the conditional samples
-    are instead an approximate MALA draw from ``pi(eta | theta)``.
+    use the requested approximate sampler. Rejection targets a prior band
+    around the noiseless level set ``h(eta) = theta``.
     """
     k_eta, k_xi, k_pos = jax.random.split(key, 3)
 
@@ -194,6 +204,9 @@ def sample_Sigma_Y_given_theta(
                 n_warmup=n_warmup,
                 step_size=step_size,
                 thinning=thinning,
+                method=method,
+                delta_theta=delta_theta,
+                max_trials=max_trials,
             )[0]
         )(theta, keys_cond)
         diffs = jax.vmap(u)(eta) - jax.vmap(u)(eta_prime)

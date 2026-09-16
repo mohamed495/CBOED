@@ -156,7 +156,8 @@ def paired_samples(u, prior, key, n_samples):
 def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: int, net_steps: int,
                     n_gradient_chunk_size: int | None = None,
                     qoi_mcmc_warmup: int = 100, qoi_mcmc_step_size: float = 1e-3,
-                    qoi_mcmc_thinning: int = 1):
+                    qoi_mcmc_thinning: int = 1, qoi_method: str = "mala",
+                    delta_theta: float = 1e-2, qoi_max_trials: int = 1000):
     """``(Sigma_Y, Sigma_Y_given_theta, {method: (Sigma_signal, Sigma_noise) | None})``.
 
     ``n_gradient_chunk_size`` : bounds the gradient route's peak memory
@@ -169,6 +170,11 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
     first point downstream that forces JAX to materialize the result).
     """
     prior, model, u, likelihood, inference, go = build_case(lambda_, case)
+    if QOI_TYPE == "energy" and lambda_ != 0.0:
+        raise ValueError(
+            "The noiseless energy protocol uses the gradient simplification "
+            "only available when the forward model is linear (lambda=0)."
+        )
     k_pairs, k_Y, k_Yth, k_grad, k_net_f, k_net_g = jr.split(key, 6)
 
     u_vals, Y, eta = paired_samples(u, prior, k_pairs, n_samples)
@@ -186,15 +192,19 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
             h=QOI_H if QOI_TYPE == "energy" else None,
             n_warmup=qoi_mcmc_warmup, step_size=qoi_mcmc_step_size,
             thinning=qoi_mcmc_thinning,
+            method=qoi_method, delta_theta=delta_theta, max_trials=qoi_max_trials,
         )
         if QOI_TYPE == "energy":
             theta_for_noise = jax.vmap(QOI_H)(eta)
         else:
             theta_for_noise = eta[:, :N_QOI]
-        Sigma_signal_g, Sigma_noise_g = gradient_diagnostics(
-            u, QOI_H, prior, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_grad, n_gradient,
-            chunk_size=n_gradient_chunk_size,
-        )
+        if QOI_TYPE == "energy":
+            Sigma_signal_g, Sigma_noise_g = Sigma_Y, SIGMA_OBS_MATRIX
+        else:
+            Sigma_signal_g, Sigma_noise_g = gradient_diagnostics(
+                u, QOI_H, prior, SIGMA_OBS_MATRIX, SIGMA_XI_QOI, k_grad, n_gradient,
+                chunk_size=n_gradient_chunk_size,
+            )
 
     methods: dict = {"gradient": (Sigma_signal_g, Sigma_noise_g)}
     features_g = jnp.concatenate([Y, theta_for_noise], axis=1)
@@ -245,7 +255,8 @@ def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_in
                        nmc_n_inner_theta: int, nmc_n_inner_marginal: int, nmc_chunk_size: int | None = None,
                        nmc_inner_chunk_size: int | None = None,
                        qoi_mcmc_warmup: int = 100, qoi_mcmc_step_size: float = 1e-3,
-                       qoi_mcmc_thinning: int = 1):
+                       qoi_mcmc_thinning: int = 1, qoi_method: str = "mala",
+                       delta_theta: float = 1e-2, qoi_max_trials: int = 1000):
     """``EIG(I_p)`` by nested MC -- used for the conservative bound's ``eig_full``.
 
     ``nmc_chunk_size`` processes outer samples in sequential batches and
@@ -268,6 +279,8 @@ def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_in
         likelihood=likelihood, prior_eta=prior, B=B_QOI, h=QOI_H,
         Sigma_xi=SIGMA_XI_QOI, n_warmup=qoi_mcmc_warmup,
         step_size=qoi_mcmc_step_size, thinning=qoi_mcmc_thinning,
+        conditional_method=qoi_method, delta_theta=delta_theta,
+        max_trials=qoi_max_trials,
     )
     return est.estimate(
         key, n_outer=nmc_n_outer, n_inner_theta=nmc_n_inner_theta, n_inner_marginal=nmc_n_inner_marginal,
@@ -330,7 +343,8 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
                          nmc_n_outer, nmc_n_inner, nmc_n_inner_theta, nmc_n_inner_marginal, budgets, base_seed,
                          eig_full_mode="certified", nmc_chunk_size=None, nmc_inner_chunk_size=None,
                          n_gradient_chunk_size=None, qoi_mcmc_warmup=100,
-                         qoi_mcmc_step_size=1e-3, qoi_mcmc_thinning=1):
+                         qoi_mcmc_step_size=1e-3, qoi_mcmc_thinning=1,
+                         qoi_method="mala", delta_theta=1e-2, qoi_max_trials=1000):
     """Repetition loop -- 'once' diagnostics (repeat 0) + bounds per repetition.
 
     Parameters
@@ -357,6 +371,7 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
             nmc_inner_chunk_size=nmc_inner_chunk_size,
             qoi_mcmc_warmup=qoi_mcmc_warmup, qoi_mcmc_step_size=qoi_mcmc_step_size,
             qoi_mcmc_thinning=qoi_mcmc_thinning,
+            qoi_method=qoi_method, delta_theta=delta_theta, qoi_max_trials=qoi_max_trials,
         )
 
     for r in range(n_repeats):
@@ -368,6 +383,7 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
             n_gradient_chunk_size=n_gradient_chunk_size,
             qoi_mcmc_warmup=qoi_mcmc_warmup, qoi_mcmc_step_size=qoi_mcmc_step_size,
             qoi_mcmc_thinning=qoi_mcmc_thinning,
+            qoi_method=qoi_method, delta_theta=delta_theta, qoi_max_trials=qoi_max_trials,
         )
         if r == 0:
             once = (Sigma_Y, Sigma_Y_given_theta, methods_diag)
@@ -465,7 +481,7 @@ def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int 
     save(
         vf.plot_reconstruction(
             X, np.asarray(prior.sample(k_prior, 200)), np.asarray(post), np.asarray(theta_true),
-            sensors=np.asarray(design),
+            sensors=np.asarray(design), sensor_order=np.arange(1, len(design) + 1),
         ),
         out / f"01a_reconstruction_standard_lambda_0.00.{fmt}",
     )
@@ -504,9 +520,62 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 5, fmt: st
     save(
         vf.plot_reconstruction(
             X, np.asarray(prior.sample(k_prior, 200)), np.asarray(post), np.asarray(theta_true),
-            sensors=np.asarray(design), qoi_span=qoi_span,
+            sensors=np.asarray(design), sensor_order=np.arange(1, len(design) + 1), qoi_span=qoi_span,
         ),
         out / f"01b_reconstruction_go_lambda_0.00.{fmt}",
+    )
+
+
+def fig_histogram_energy_posterior(
+    once_go_lambda0, out: Path, m_design: int = 5, n_samples: int = 10000, fmt: str = "png"
+):
+    """Plot ``theta | Y_m`` for the incremental and conservative GO designs.
+
+    This figure is restricted to ``energy`` at ``lambda=0``. The forward
+    model is then linear, so ``eta | Y_m`` is sampled exactly from its Gaussian
+    posterior before applying the nonlinear map ``theta = ||eta||**2``.
+    """
+    if QOI_TYPE != "energy":
+        return
+
+    Sigma_Y, Sigma_Y_given_theta, methods_diag = once_go_lambda0
+    Sigma_signal, Sigma_noise = methods_diag["gradient"]
+    dg = DiagnosticMatrices(
+        Sigma_Y=jnp.asarray(Sigma_Y),
+        Sigma_Y_given_theta=jnp.asarray(Sigma_Y_given_theta),
+        Sigma_signal=jnp.asarray(Sigma_signal),
+        Sigma_noise=jnp.asarray(Sigma_noise),
+        certified=True,
+    )
+    designs = {
+        "INC": greedy_schur(dg.Sigma_signal, dg.Sigma_Y_given_theta, m_design).design,
+        "CONS": greedy_schur(dg.Sigma_Y, dg.Sigma_noise, m_design).design,
+    }
+
+    prior, model, _, _, inference, _ = build_case(0.0, "go")
+    k_true, k_noise, k_prior, k_post = jr.split(jr.key(43), 4)
+    eta_true = prior.sample(k_true, 1)[0]
+    y_full = model(eta_true, None)
+    y_full = y_full + jr.normal(k_noise, (N,)) * jnp.sqrt(jnp.diag(SIGMA_OBS_MATRIX))
+
+    theta_samples = {}
+    for label, design in designs.items():
+        y = y_full[design]
+        mu_post = inference._mu(y, prior.mu, design)
+        Gamma_post = inference._cov(prior.mu, design)
+        L_post = jnp.linalg.cholesky(Gamma_post + 1e-10 * jnp.eye(N))
+        eta_post = mu_post + jr.normal(k_post, (n_samples, N)) @ L_post.T
+        theta_samples[label] = np.asarray(jnp.sum(eta_post**2, axis=1))
+
+    prior_samples = prior.sample(k_prior, n_samples)
+    prior_theta = np.asarray(jnp.sum(prior_samples**2, axis=1))
+    save(
+        vf.plot_energy_posterior_histograms(
+            theta_samples,
+            float(jnp.sum(eta_true**2)),
+            prior_theta_samples=prior_theta,
+        ),
+        out / f"04_histogram_energy_posterior_lambda_0.00_m_{m_design:02d}.{fmt}",
     )
 
 
@@ -673,6 +742,13 @@ def main():
     p.add_argument("--qoi-mcmc-warmup", type=int, default=100)
     p.add_argument("--qoi-mcmc-step-size", type=float, default=1e-3)
     p.add_argument("--qoi-mcmc-thinning", type=int, default=1)
+    p.add_argument("--n-histogram", type=int, default=10000)
+    p.add_argument(
+        "--qoi-method", choices=("mala", "rejection"), default="mala",
+        help="Conditional sampler for nonlinear QoIs; energy uses rejection.",
+    )
+    p.add_argument("--delta-theta", type=float, default=1e-2)
+    p.add_argument("--qoi-max-trials", type=int, default=1000)
     p.add_argument(
         "--nmc-inner-chunk-size", type=int, default=128,
         help="Inner NMC batch size for eig-full-mode=mc. Inner likelihoods are accumulated"
@@ -704,6 +780,10 @@ def main():
     )
     args = p.parse_args()
     configure_qoi(args.go_type)
+    if args.go_type == "energy" and any(lambda_ != 0.0 for lambda_ in args.lambdas):
+        raise ValueError("The noiseless energy protocol currently requires --lambdas 0.0.")
+    if args.go_type == "energy" and args.qoi_method != "rejection":
+        raise ValueError("The energy protocol requires --qoi-method rejection.")
 
     use_style()
     out, cache_dir = Path(args.out), Path(args.cache)
@@ -733,6 +813,9 @@ def main():
                 qoi_mcmc_warmup=args.qoi_mcmc_warmup,
                 qoi_mcmc_step_size=args.qoi_mcmc_step_size,
                 qoi_mcmc_thinning=args.qoi_mcmc_thinning,
+                qoi_method=args.qoi_method,
+                delta_theta=args.delta_theta,
+                qoi_max_trials=args.qoi_max_trials,
             )
             all_once[(lambda_, case)] = once
             per_method_all[(lambda_, case)] = per_method
@@ -747,6 +830,10 @@ def main():
                 fig_reconstruction_standard(once, out, fmt=args.format)
             if lambda_ == 0.0 and case == "go":
                 fig_reconstruction_go(once, out, fmt=args.format)
+                fig_histogram_energy_posterior(
+                    once, out, m_design=max(args.budgets),
+                    n_samples=args.n_histogram, fmt=args.format,
+                )
             fig_spectrum(all_once, args.budgets, out, fmt=args.format)
             fig_selection_stability(
                 lambda_, case, selection_frequency, args.budgets, args.n_repeats, out, fmt=args.format

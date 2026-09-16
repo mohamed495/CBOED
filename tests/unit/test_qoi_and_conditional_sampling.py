@@ -21,6 +21,7 @@ def test_build_qoi_energy_contract_and_jacobian():
 
     assert n_qoi == 1
     assert sigma_xi.shape == (1, 1)
+    assert jnp.array_equal(sigma_xi, jnp.zeros((1, 1)))
     assert h(eta).shape == (1,)
     assert jnp.allclose(h(eta), jnp.asarray([jnp.sum(eta**2)]))
     assert jnp.allclose(jax.jacfwd(h)(eta), 2 * eta[None, :])
@@ -72,3 +73,33 @@ def test_linear_conditional_sampler_shape():
     )
 
     assert samples.shape == (5, 2)
+
+
+def test_energy_rejection_sampler_respects_tolerance_band():
+    prior = GaussianPrior(
+        prior=GaussianProcess(
+            kernel=Gaussian(length_scale=1.0, sigma=1.0),
+            mu=jnp.zeros(2),
+        )
+    )
+
+    def h(eta):
+        return jnp.asarray([jnp.sum(eta**2)])
+
+    theta = jnp.asarray([1.0])
+    delta_theta = 0.2
+    samples = sample_eta_given_theta(
+        prior,
+        theta,
+        jax.random.key(2),
+        h=h,
+        Sigma_xi=jnp.zeros((1, 1)),
+        n_samples=8,
+        method="rejection",
+        delta_theta=delta_theta,
+        max_trials=5000,
+    )
+
+    distances = jax.vmap(lambda eta: jnp.abs(h(eta) - theta))(samples)
+    assert samples.shape == (8, 2)
+    assert bool(jnp.all(distances <= delta_theta))
