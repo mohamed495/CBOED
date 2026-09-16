@@ -249,8 +249,9 @@ def plot_energy_posterior_histograms(
     prior_theta_samples=None,
     bins=60,
     show_density=True,
+    overlay=True,
 ):
-    """Plot posterior energy histograms for two sensor designs.
+    """Plot posterior energy histograms for sensor designs.
 
     Parameters
     ----------
@@ -264,6 +265,9 @@ def plot_energy_posterior_histograms(
         Number of histogram bins.
     show_density : bool, optional
         Overlay a Gaussian-kernel density estimate on each histogram.
+    overlay : bool, optional
+        Overlay all designs on one axes when true. When false, use one panel
+        per design.
 
     Returns
     -------
@@ -283,10 +287,13 @@ def plot_energy_posterior_histograms(
     if any(not np.all(np.isfinite(samples)) for samples in arrays):
         raise ValueError("energy posterior samples must contain finite values")
     finite = arrays
+    if prior_theta_samples is not None:
+        prior_theta_samples = np.asarray(prior_theta_samples).ravel()
+        if not np.all(np.isfinite(prior_theta_samples)):
+            raise ValueError("prior energy samples must contain finite values")
 
     all_samples = np.concatenate(finite)
     if prior_theta_samples is not None:
-        prior_theta_samples = np.asarray(prior_theta_samples).ravel()
         all_samples = np.concatenate([all_samples, prior_theta_samples])
     edges = np.histogram_bin_edges(all_samples, bins=bins)
     x_grid = np.linspace(0.0, max(float(all_samples.max()), float(theta_true)) * 1.05, 400)
@@ -297,9 +304,17 @@ def plot_energy_posterior_histograms(
         scaled = (x_grid[:, None] - samples[None, :]) / bandwidth
         return np.mean(np.exp(-0.5 * scaled**2), axis=1) / (bandwidth * np.sqrt(2 * np.pi))
 
-    fig, axes = plt.subplots(1, len(labels), figsize=(4.2 * len(labels), 3.2), squeeze=False)
-    for ax, label, samples in zip(axes[0], labels, finite, strict=True):
-        if prior_theta_samples is not None:
+    n_axes = 1 if overlay else len(labels)
+    fig, axes = plt.subplots(1, n_axes, figsize=(5.8 * n_axes, 3.6), squeeze=False)
+    axes = axes[0]
+    posterior_colors = {
+        "INC": COLORS["incremental"],
+        "CONS": COLORS["conservative"],
+    }
+    for index, (label, samples) in enumerate(zip(labels, finite, strict=True)):
+        ax = axes[0] if overlay else axes[index]
+        color = posterior_colors.get(label, COLORS["posterior"])
+        if prior_theta_samples is not None and index == 0:
             ax.hist(
                 prior_theta_samples,
                 bins=edges,
@@ -308,13 +323,57 @@ def plot_energy_posterior_histograms(
                 alpha=0.22,
                 label="prior",
             )
-        ax.hist(samples, bins=edges, density=True, color=COLORS["posterior"], alpha=0.72,
-                label="posterior")
+        ax.hist(samples, bins=edges, density=True, color=color, alpha=0.32,
+                label=f"{label} posterior")
         if show_density:
-            ax.plot(x_grid, kde(samples), color=COLORS["exact"], lw=2.0, label="smoothed density")
-        ax.axvline(theta_true, color=COLORS["truth"], ls="--", lw=1.8,
-                   label=r"$\theta_{\rm true}$")
-        ax.set_title(label)
+            ax.plot(x_grid, kde(samples), color=color, lw=2.0, label=f"{label} density")
+        if not overlay:
+            ax.axvline(theta_true, color=COLORS["truth"], ls="--", lw=1.8,
+                       label=r"$\theta_{\rm true}$")
+            ax.set_title(label)
+        variance = float(np.var(samples, ddof=1)) if samples.size > 1 else float("nan")
+        prior_variance = (
+            float(np.var(prior_theta_samples, ddof=1))
+            if prior_theta_samples is not None and prior_theta_samples.size > 1
+            else float("nan")
+        )
+        ratio = variance / prior_variance if prior_variance > 0 else float("nan")
+        if overlay:
+            annotation = ax.texts[0] if ax.texts else None
+            line = f"{label}: Var(post)/Var(prior) = {ratio:.3f}"
+            if annotation is None:
+                annotation = ax.text(
+                    0.02,
+                    0.97,
+                    line,
+                    transform=ax.transAxes,
+                    va="top",
+                    fontsize=8,
+                    color=color,
+                    linespacing=1.5,
+                    bbox={"facecolor": "white", "edgecolor": color, "alpha": 0.85, "pad": 3},
+                )
+            else:
+                annotation.set_text(f"{annotation.get_text()}\n{line}")
+                annotation.set_color("0.2")
+                annotation.set_bbox(
+                    {"facecolor": "white", "edgecolor": "0.35", "alpha": 0.85, "pad": 3}
+                )
+        else:
+            ax.text(
+                0.02,
+                0.97,
+                f"{label}: Var(post)/Var(prior) = {ratio:.3f}",
+                transform=ax.transAxes,
+                va="top",
+                fontsize=8,
+                color=color,
+                bbox={"facecolor": "white", "edgecolor": color, "alpha": 0.8, "pad": 2},
+            )
+    ax = axes[0]
+    ax.axvline(theta_true, color=COLORS["truth"], ls="--", lw=1.8,
+               label=r"$\theta_{\rm true}$")
+    for ax in axes:
         ax.set_xlabel(r"$\theta = \|\eta\|^2$")
         ax.set_ylabel("density")
         ax.legend(fontsize=8)

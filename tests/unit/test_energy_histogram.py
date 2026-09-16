@@ -5,7 +5,7 @@ import pytest
 from cboed.viz.fields import plot_energy_posterior_histograms
 
 
-def test_energy_posterior_histogram_has_one_panel_per_design():
+def test_energy_posterior_histogram_overlays_designs():
     figure = plot_energy_posterior_histograms(
         {
             "INC": np.linspace(1.0, 2.0, 20),
@@ -17,7 +17,7 @@ def test_energy_posterior_histogram_has_one_panel_per_design():
     )
 
     try:
-        assert len(figure.axes) == 2
+        assert len(figure.axes) == 1
         assert all(axis.get_xlabel() == r"$\theta = \|\eta\|^2$" for axis in figure.axes)
     finally:
         plt.close(figure)
