@@ -128,7 +128,7 @@ def sample_Sigma_Y_given_theta(
     step_size: float = 1e-3,
     thinning: int = 1,
     method: str = "mala",
-    delta_theta: float = 1e-2,
+    delta_theta: float = 1.0,
     max_trials: int = 1000,
 ) -> Float[Array, "n_obs n_obs"]:
     r"""Compute ``Sigma_{Y|theta} = Sigma_obs + E[Cov(u(eta)|theta)]`` -- (27) via Rem. 3.1.

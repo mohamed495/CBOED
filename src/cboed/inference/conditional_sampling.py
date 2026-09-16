@@ -154,7 +154,7 @@ def sample_eta_given_theta(
     step_size: float = 1e-3,
     thinning: int = 1,
     method: str = "mala",
-    delta_theta: float = 1e-2,
+    delta_theta: float = 1.0,
     max_trials: int = 1000,
 ) -> Array:
     r"""Sample ``eta | theta`` for a linear or nonlinear QoI.

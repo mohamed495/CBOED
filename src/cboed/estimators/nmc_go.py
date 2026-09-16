@@ -159,7 +159,7 @@ class GoalOrientedNestedMonteCarloEIG(EIGEstimator):
     @property
     def delta_theta(self) -> float:
         """QoI tolerance used by the rejection sampler."""
-        return self._hyperparameters.get("delta_theta", 1e-2)
+        return self._hyperparameters.get("delta_theta", 1.0)
 
     @property
     def max_trials(self) -> int:

@@ -157,7 +157,7 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
                     n_gradient_chunk_size: int | None = None,
                     qoi_mcmc_warmup: int = 100, qoi_mcmc_step_size: float = 1e-3,
                     qoi_mcmc_thinning: int = 1, qoi_method: str = "mala",
-                    delta_theta: float = 1e-2, qoi_max_trials: int = 1000):
+                    delta_theta: float = 1.0, qoi_max_trials: int = 1000):
     """``(Sigma_Y, Sigma_Y_given_theta, {method: (Sigma_signal, Sigma_noise) | None})``.
 
     ``n_gradient_chunk_size`` : bounds the gradient route's peak memory
@@ -194,6 +194,11 @@ def compute_repeat(lambda_: float, case: str, key, n_samples: int, n_gradient: i
             thinning=qoi_mcmc_thinning,
             method=qoi_method, delta_theta=delta_theta, max_trials=qoi_max_trials,
         )
+        if not bool(jnp.all(jnp.isfinite(Sigma_Y_given_theta))):
+            raise ValueError(
+                "Conditional QoI sampling produced non-finite Sigma_Y_given_theta; "
+                "increase --delta-theta or --qoi-max-trials."
+            )
         if QOI_TYPE == "energy":
             theta_for_noise = jax.vmap(QOI_H)(eta)
         else:
@@ -256,7 +261,7 @@ def estimate_eig_full(lambda_: float, case: str, key, nmc_n_outer: int, nmc_n_in
                        nmc_inner_chunk_size: int | None = None,
                        qoi_mcmc_warmup: int = 100, qoi_mcmc_step_size: float = 1e-3,
                        qoi_mcmc_thinning: int = 1, qoi_method: str = "mala",
-                       delta_theta: float = 1e-2, qoi_max_trials: int = 1000):
+                       delta_theta: float = 1.0, qoi_max_trials: int = 1000):
     """``EIG(I_p)`` by nested MC -- used for the conservative bound's ``eig_full``.
 
     ``nmc_chunk_size`` processes outer samples in sequential batches and
@@ -344,7 +349,7 @@ def compute_lambda_case(lambda_, case, n_repeats, n_samples, n_gradient, net_ste
                          eig_full_mode="certified", nmc_chunk_size=None, nmc_inner_chunk_size=None,
                          n_gradient_chunk_size=None, qoi_mcmc_warmup=100,
                          qoi_mcmc_step_size=1e-3, qoi_mcmc_thinning=1,
-                         qoi_method="mala", delta_theta=1e-2, qoi_max_trials=1000):
+                         qoi_method="mala", delta_theta=1.0, qoi_max_trials=1000):
     """Repetition loop -- 'once' diagnostics (repeat 0) + bounds per repetition.
 
     Parameters
@@ -754,7 +759,10 @@ def main():
         "--qoi-method", choices=("mala", "rejection"), default="mala",
         help="Conditional sampler for nonlinear QoIs; energy uses rejection.",
     )
-    p.add_argument("--delta-theta", type=float, default=1e-2)
+    p.add_argument(
+        "--delta-theta", type=float, default=1.0,
+        help="Energy tolerance for rejection sampling (default: 1.0).",
+    )
     p.add_argument("--qoi-max-trials", type=int, default=1000)
     p.add_argument(
         "--nmc-inner-chunk-size", type=int, default=128,
