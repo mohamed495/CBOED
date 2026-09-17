@@ -208,9 +208,7 @@ def sample_eta_given_theta(
     if h is None:
         raise ValueError("h is required when B is None")
     if method == "rejection":
-        return _rejection_samples(
-            prior_eta, h, theta, key, n_samples, delta_theta, max_trials
-        )
+        return _rejection_samples(prior_eta, h, theta, key, n_samples, delta_theta, max_trials)
     if method != "mala":
         raise ValueError(f"Unknown conditional sampling method: {method!r}")
     return _mala_samples(

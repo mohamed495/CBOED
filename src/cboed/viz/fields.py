@@ -327,13 +327,15 @@ def plot_energy_posterior_histograms(
                 alpha=0.22,
                 label="prior",
             )
-        ax.hist(samples, bins=edges, density=True, color=color, alpha=0.32,
-                label=f"{label} posterior")
+        ax.hist(
+            samples, bins=edges, density=True, color=color, alpha=0.32, label=f"{label} posterior"
+        )
         if show_density:
             ax.plot(x_grid, kde(samples), color=color, lw=2.0, label=f"{label} density")
         if not overlay:
-            ax.axvline(theta_true, color=COLORS["truth"], ls="--", lw=1.8,
-                       label=r"$\theta_{\rm true}$")
+            ax.axvline(
+                theta_true, color=COLORS["truth"], ls="--", lw=1.8, label=r"$\theta_{\rm true}$"
+            )
             ax.set_title(label)
         variance = float(np.var(samples, ddof=1)) if samples.size > 1 else float("nan")
         prior_variance = (
@@ -375,8 +377,7 @@ def plot_energy_posterior_histograms(
                 bbox={"facecolor": "white", "edgecolor": color, "alpha": 0.8, "pad": 2},
             )
     ax = axes[0]
-    ax.axvline(theta_true, color=COLORS["truth"], ls="--", lw=1.8,
-               label=r"$\theta_{\rm true}$")
+    ax.axvline(theta_true, color=COLORS["truth"], ls="--", lw=1.8, label=r"$\theta_{\rm true}$")
     for ax in axes:
         ax.set_xlabel(r"$\theta = \|\eta\|^2$")
         ax.set_ylabel("density")

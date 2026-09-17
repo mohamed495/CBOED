@@ -351,58 +351,128 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     return fig
 
 
-def plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title="", max_modes=15):
-    r"""Plot the first modes of ``log(alpha_i)`` and ``log(beta_i)``.
+def plot_spectrum_vs_lambda(
+    alpha_by_lambda,
+    beta_by_lambda,
+    title="",
+    max_modes=15,
+):
+    r"""Plot the first modes of ``log(max(alpha_i, 1))`` and
+    ``log(max(beta_i, 1))``.
 
-    The logarithmic quantities are retained, with a symmetric logarithmic
-    vertical scale to keep values close to zero and negative ``log(beta_i)``
-    readable. The remaining modes are omitted because they are numerically
-    flat in the benchmark.
+    Eigenvalues smaller than 1 are clipped to 1 before taking the
+    logarithm. Hence, values below the threshold are represented at
+    ``y = 0`` rather than as negative logarithms.
+
+    Each value of ``lambda`` is represented by a unique combination
+    of color and line style. This redundant encoding improves
+    readability when several lambda values are superimposed and
+    preserves distinguishability in grayscale or printed figures.
 
     Parameters
     ----------
     alpha_by_lambda, beta_by_lambda : dict[float, array_like]
-        ``{lambda: alpha_i}`` / ``{lambda: beta_i}``, each value a 1-D array
-        of generalized eigenvalues (length may differ across `lambda`
-        values) -- same keys in both dicts.
+        ``{lambda: alpha_i}`` / ``{lambda: beta_i}``, where each value is
+        a 1-D array of generalized eigenvalues.
+
     title : str, optional
         Figure suptitle.
+
     max_modes : int, optional
-        Number of modes shown, by default 15.
+        Maximum number of modes shown, by default 15.
 
     Returns
     -------
     fig : matplotlib.figure.Figure
+        The generated figure.
 
-    Examples
-    --------
-    >>> alpha_by_lambda = {0.0: [1.0, 1.0, 1.2], 1.0: [1.5, 1.3, 1.1]}
-    >>> beta_by_lambda = {0.0: [1.0, 1.0, 1.1], 1.0: [1.4, 1.2, 1.05]}
-    >>> fig = plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda)
+    Notes
+    -----
+    The transformation
+
+        log(max(alpha_i, 1))
+
+    and
+
+        log(max(beta_i, 1))
+
+    ensures that the plotted quantities are non-negative. The horizontal
+    line ``y = 0`` corresponds to the threshold ``alpha_i = 1`` or
+    ``beta_i = 1``.
+
+    The visual encoding of ``lambda`` uses both color and line style.
     """
     lams = sorted(alpha_by_lambda)
-    cmap = plt.get_cmap("cividis")
-    colors = {lam: cmap(i / max(len(lams) - 1, 1)) for i, lam in enumerate(lams)}
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), sharex=True)
+    # Qualitative palette: colors distinguish lambda values.
+    cmap = plt.get_cmap("tab10")
+
+    # Line styles provide a second, independent encoding of lambda.
+    line_styles = ["-", "--", "-.", ":"]
+
+    colors = {lam: cmap(i % cmap.N) for i, lam in enumerate(lams)}
+
+    styles = {lam: line_styles[i % len(line_styles)] for i, lam in enumerate(lams)}
+
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(10, 4.2),
+        sharex=True,
+        sharey=True,
+    )
+
     for lam in lams:
         alpha = np.asarray(alpha_by_lambda[lam])[:max_modes]
         beta = np.asarray(beta_by_lambda[lam])[:max_modes]
-        idx = np.arange(1, min(len(alpha), len(beta)) + 1)
-        alpha = alpha[: len(idx)]
-        beta = beta[: len(idx)]
-        label = rf"$\lambda={lam}$"
-        axes[0].plot(idx, np.log(alpha), lw=1.5, color=colors[lam], label=label)
-        axes[1].plot(idx, np.log(beta), lw=1.5, color=colors[lam], label=label)
 
-    axes[0].set_ylabel(r"$\log(\alpha_i)$")
-    axes[1].set_ylabel(r"$\log(\beta_i)$")
+        n_modes = min(len(alpha), len(beta))
+        idx = np.arange(1, n_modes + 1)
+
+        alpha = alpha[:n_modes]
+        beta = beta[:n_modes]
+
+        # Clip eigenvalues below 1 before taking the logarithm.
+        log_alpha = np.log(np.maximum(alpha, 1.0))
+        log_beta = np.log(np.maximum(beta, 1.0))
+
+        label = rf"$\lambda={lam}$"
+
+        axes[0].plot(
+            idx,
+            log_alpha,
+            linestyle=styles[lam],
+            color=colors[lam],
+            lw=1.5,
+            label=label,
+        )
+
+        axes[1].plot(
+            idx,
+            log_beta,
+            linestyle=styles[lam],
+            color=colors[lam],
+            lw=1.5,
+            label=label,
+        )
+
+    axes[0].set_ylabel(r"$\log(\max(\alpha_i,1))$")
+    axes[1].set_ylabel(r"$\log(\max(\beta_i,1))$")
+
     for ax in axes:
         ax.set_xlabel("mode index")
-        ax.set_yscale("symlog", linthresh=1e-3)
-        ax.axhline(0, color="0.6", lw=0.8, ls=":")
+        ax.set_ylim(bottom=0)
+        ax.axhline(
+            0,
+            color="0.6",
+            lw=0.8,
+            ls=":",
+        )
         ax.legend(fontsize=7)
+
     if title:
         fig.suptitle(title, fontsize=11)
+
     fig.tight_layout()
+
     return fig
