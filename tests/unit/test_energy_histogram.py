@@ -21,6 +21,8 @@ def test_energy_posterior_histogram_overlays_designs():
         assert len(figure.axes) == 1
         assert all(axis.get_xlabel() == r"$\theta = \|\eta\|^2$" for axis in figure.axes)
         assert figure.axes[0].get_xlim() == (0.0, 2.5)
+        legend_labels = [text.get_text() for text in figure.axes[0].get_legend().get_texts()]
+        assert legend_labels == ["prior", "INC posterior", "CONS posterior", r"$\theta_{\rm true}$"]
     finally:
         plt.close(figure)
 

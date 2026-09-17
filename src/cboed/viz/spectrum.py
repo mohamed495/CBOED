@@ -350,7 +350,6 @@ def plot_suboptimality_vs_lambda(ms, inc_by_lambda, cons_by_lambda, title=""):
     fig.tight_layout()
     return fig
 
-
 def plot_spectrum_vs_lambda(
     alpha_by_lambda,
     beta_by_lambda,
@@ -410,13 +409,18 @@ def plot_spectrum_vs_lambda(
     # Line styles provide a second, independent encoding of lambda.
     line_styles = ["-", "--", "-.", ":"]
 
-    colors = {lam: cmap(i % cmap.N) for i, lam in enumerate(lams)}
+    colors = {
+        lam: cmap(i % cmap.N)
+        for i, lam in enumerate(lams)
+    }
 
-    styles = {lam: line_styles[i % len(line_styles)] for i, lam in enumerate(lams)}
+    styles = {
+        lam: line_styles[i % len(line_styles)]
+        for i, lam in enumerate(lams)
+    }
 
     fig, axes = plt.subplots(
-        1,
-        2,
+        1, 2,
         figsize=(10, 4.2),
         sharex=True,
         sharey=True,
