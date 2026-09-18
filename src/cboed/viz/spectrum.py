@@ -355,13 +355,15 @@ def plot_spectrum_vs_lambda(
     beta_by_lambda,
     title="",
     max_modes=15,
+    noise_floor=1e-12,
+    linthresh=0.1,
 ):
-    r"""Plot the first modes of ``log(max(alpha_i, 1))`` and
-    ``log(max(beta_i, 1))``.
+    r"""Plot the first modes of ``log(alpha_i)`` and ``log(beta_i)``.
 
-    Eigenvalues smaller than 1 are clipped to 1 before taking the
-    logarithm. Hence, values below the threshold are represented at
-    ``y = 0`` rather than as negative logarithms.
+    No clipping is applied: ``alpha_i`` and ``beta_i`` are generalized
+    eigenvalues that can be smaller or larger than 1, so ``log`` can be
+    negative or positive. The horizontal line ``y = 0`` corresponds to
+    the threshold ``alpha_i = 1`` / ``beta_i = 1``.
 
     Each value of ``lambda`` is represented by a unique combination
     of color and line style. This redundant encoding improves
@@ -380,6 +382,29 @@ def plot_spectrum_vs_lambda(
     max_modes : int, optional
         Maximum number of modes shown, by default 15.
 
+    noise_floor : float, optional
+        If given, ``log(alpha_i)``/``log(beta_i)`` values with
+        ``abs(.) < noise_floor`` are set to exactly 0 before plotting.
+        This is a display threshold, not a value used in any
+        computation upstream -- it only prevents machine-precision
+        round-off (e.g. ``alpha_i`` numerically equal to 1 up to
+        ``~1e-16``) from being displayed as a spurious jump. Set it to
+        ``None`` to plot raw values as-is.
+
+    linthresh : float, optional
+        Half-width, in nats, of the linear region around zero for the
+        symmetric logarithmic y-axis. The plotted quantities are already
+        ``log(alpha_i)`` and ``log(beta_i)``; ``symlog`` is therefore used
+        to show their negative and positive values on one axis. The default
+        ``0.1`` nats gives a readable neighbourhood of the threshold
+        ``alpha_i = beta_i = 1``.
+
+    show_noise_band : bool, optional
+        If True, shade the region ``[-noise_floor, noise_floor]`` on
+        both axes to make the discarded/negligible band visible to the
+        reader. Requires ``noise_floor`` to be set; ignored otherwise.
+        Default False.
+
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -387,43 +412,26 @@ def plot_spectrum_vs_lambda(
 
     Notes
     -----
-    The transformation
-
-        log(max(alpha_i, 1))
-
-    and
-
-        log(max(beta_i, 1))
-
-    ensures that the plotted quantities are non-negative. The horizontal
-    line ``y = 0`` corresponds to the threshold ``alpha_i = 1`` or
-    ``beta_i = 1``.
-
     The visual encoding of ``lambda`` uses both color and line style.
     """
+    if linthresh <= 0:
+        raise ValueError("linthresh must be strictly positive")
+
     lams = sorted(alpha_by_lambda)
 
-    # Qualitative palette: colors distinguish lambda values.
     cmap = plt.get_cmap("tab10")
-
-    # Line styles provide a second, independent encoding of lambda.
     line_styles = ["-", "--", "-.", ":"]
 
-    colors = {
-        lam: cmap(i % cmap.N)
-        for i, lam in enumerate(lams)
-    }
+    colors = {lam: cmap(i % cmap.N) for i, lam in enumerate(lams)}
 
-    styles = {
-        lam: line_styles[i % len(line_styles)]
-        for i, lam in enumerate(lams)
-    }
+    styles = {lam: line_styles[i % len(line_styles)] for i, lam in enumerate(lams)}
 
     fig, axes = plt.subplots(
-        1, 2,
+        1,
+        2,
         figsize=(10, 4.2),
         sharex=True,
-        sharey=True,
+        sharey=False,
     )
 
     for lam in lams:
@@ -436,9 +444,12 @@ def plot_spectrum_vs_lambda(
         alpha = alpha[:n_modes]
         beta = beta[:n_modes]
 
-        # Clip eigenvalues below 1 before taking the logarithm.
-        log_alpha = np.log(np.maximum(alpha, 1.0))
-        log_beta = np.log(np.maximum(beta, 1.0))
+        log_alpha = np.log(alpha)
+        log_beta = np.log(beta)
+
+        if noise_floor is not None:
+            log_alpha = np.where(np.abs(log_alpha) < noise_floor, 0.0, log_alpha)
+            log_beta = np.where(np.abs(log_beta) < noise_floor, 0.0, log_beta)
 
         label = rf"$\lambda={lam}$"
 
@@ -460,23 +471,17 @@ def plot_spectrum_vs_lambda(
             label=label,
         )
 
-    axes[0].set_ylabel(r"$\log(\max(\alpha_i,1))$")
-    axes[1].set_ylabel(r"$\log(\max(\beta_i,1))$")
+    axes[0].set_ylabel(r"$\log(\alpha_i)$")
+    axes[1].set_ylabel(r"$\log(\beta_i)$")
 
     for ax in axes:
         ax.set_xlabel("mode index")
-        ax.set_ylim(bottom=0)
-        ax.axhline(
-            0,
-            color="0.6",
-            lw=0.8,
-            ls=":",
-        )
+        ax.set_yscale("symlog", linthresh=linthresh)
+        ax.axhline(0, color="grey", lw=0.7, ls=":")
         ax.legend(fontsize=7)
 
     if title:
         fig.suptitle(title, fontsize=11)
 
     fig.tight_layout()
-
     return fig
