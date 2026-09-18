@@ -247,7 +247,7 @@ def plot_energy_posterior_histograms(
     theta_samples_by_design,
     theta_true,
     prior_theta_samples=None,
-    bins=60,
+    bins=600,
     show_density=True,
     overlay=True,
     x_max=None,
@@ -328,8 +328,13 @@ def plot_energy_posterior_histograms(
                 label="prior",
             )
             if show_density:
-                ax.plot(x_grid, kde(prior_theta_samples), color=COLORS["prior"], lw=1.8,
-                        label="_nolegend_")
+                ax.plot(
+                    x_grid,
+                    kde(prior_theta_samples),
+                    color=COLORS["prior"],
+                    lw=1.8,
+                    label="_nolegend_",
+                )
         ax.hist(
             samples, bins=edges, density=True, color=color, alpha=0.32, label=f"{label} posterior"
         )
@@ -352,6 +357,7 @@ def plot_energy_posterior_histograms(
         ax.legend(fontsize=8)
     fig.tight_layout()
     return fig
+
 
 
 def plot_contraction(x, prior_std, posterior_std, sensors=None):
