@@ -120,6 +120,7 @@ def plot_reconstruction(
     laplace_warning=False,
     n_show=30,
     qoi_span=None,
+    title="",
 ):
     """Plot prior, posterior, and ``theta_true`` realizations overlaid on one axes.
 
@@ -238,6 +239,8 @@ def plot_reconstruction(
         )
 
     ax.set_xlabel("$x$")
+    if title:
+        ax.set_title(title, fontsize=11)
     ax.legend(handles=handles, fontsize=8, ncol=2)
     fig.tight_layout()
     return fig

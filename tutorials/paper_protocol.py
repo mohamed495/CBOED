@@ -99,6 +99,25 @@ LAMBDAS_PROTOCOL = (0.0, 0.05, 0.2, 0.75, 1.0)
 CASES = ("standard", "go")
 METHODS = ("gradient", "affine", "affine_nn")
 
+
+def case_display_name(case: str) -> str:
+    """Display name used in titles and filenames.
+
+    The legacy label ``"go"`` was tied to the nuisance QoI. Now the protocol
+    supports two different goal-oriented QoIs, so titles should spell out which
+    one is being plotted instead of using the old generic name.
+    """
+    if case == "standard":
+        return "standard"
+    if case != "go":
+        return case
+    if QOI_TYPE == "nuisance":
+        return "nuisance"
+    if QOI_TYPE == "energy":
+        return "energy"
+    return "go"
+
+
 X = np.linspace(DOMAIN[0], DOMAIN[1], N + 2)[1:-1]
 QOI_TYPE = None
 QOI_H = None
@@ -494,6 +513,7 @@ def fig_reconstruction_standard(once_standard_lambda0, out: Path, m_design: int 
         vf.plot_reconstruction(
             X, np.asarray(prior.sample(k_prior, 200)), np.asarray(post), np.asarray(theta_true),
             sensors=np.asarray(design), sensor_order=np.arange(1, len(design) + 1),
+            title=r"standard, $\lambda=0$",
         ),
         out / f"01a_reconstruction_standard_lambda_0.00.{fmt}",
     )
@@ -529,12 +549,14 @@ def fig_reconstruction_go(once_go_lambda0, out: Path, m_design: int = 5, fmt: st
     ).T
     qoi_span = None if QOI_TYPE == "energy" else (float(X[0]), float(X[N_QOI - 1]))
 
+    title = rf"goal-oriented ({case_display_name('go')}), $\lambda=0$"
     save(
         vf.plot_reconstruction(
             X, np.asarray(prior.sample(k_prior, 200)), np.asarray(post), np.asarray(theta_true),
             sensors=np.asarray(design), sensor_order=np.arange(1, len(design) + 1), qoi_span=qoi_span,
+            title=title,
         ),
-        out / f"01b_reconstruction_go_lambda_0.00.{fmt}",
+        out / f"01b_reconstruction_{case_display_name('go')}_lambda_0.00.{fmt}",
     )
 
 
@@ -638,15 +660,16 @@ def fig_spectrum(all_once, budgets, out: Path, fmt: str = "png"):
 
         if not alpha_by_lambda:
             continue
+        label = case_display_name(case)
         save(
-            vs.plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=f"gradient, {case}"),
-            out / f"02_spectrum_vs_lambda_{case}.{fmt}",
+            vs.plot_spectrum_vs_lambda(alpha_by_lambda, beta_by_lambda, title=f"gradient, {label}"),
+            out / f"02_spectrum_vs_lambda_{label}.{fmt}",
         )
         save(
             vs.plot_suboptimality_vs_lambda(
-                ms, inc_by_lambda, cons_by_lambda, title=f"gradient, {case}"
+                ms, inc_by_lambda, cons_by_lambda, title=f"gradient, {label}"
             ),
-            out / f"02b_suboptimality_vs_lambda_{case}.{fmt}",
+            out / f"02b_suboptimality_vs_lambda_{label}.{fmt}",
         )
 
 
@@ -657,15 +680,16 @@ def fig_spectrum(all_once, budgets, out: Path, fmt: str = "png"):
 
 def fig_selection_stability(lambda_, case, selection_frequency, budgets, n_repeats, out: Path, fmt: str = "png"):
     """Selection frequencies of the two gradient-route SNR designs."""
+    label = case_display_name(case)
     save(
         vd.plot_selection_frequency(
             X,
             selection_frequency,
             budgets,
             n_repeats,
-            title=rf"Sensor-selection stability -- {case}, $\lambda={lambda_}$",
+            title=rf"Sensor-selection stability -- {label}, $\lambda={lambda_}$",
         ),
-        out / f"03_selection_stability_{case}_lambda_{lambda_:.2f}.{fmt}",
+        out / f"03_selection_stability_{label}_lambda_{lambda_:.2f}.{fmt}",
     )
 
 
@@ -708,14 +732,15 @@ def fig_boxplots(per_method_all, budgets, out: Path, fmt: str = "png"):
     a continuous band.
     """
     for (lambda_, case), per_method in per_method_all.items():
+        label = case_display_name(case)
         for method, per_strategy in per_method.items():
             ylim = _shared_ylim(per_method_all, method, case)
             save(
                 vb.plot_two_strategies_boxplot(
-                    budgets, per_strategy, title=rf"{method}, {case}, $\lambda={lambda_}$",
+                    budgets, per_strategy, title=rf"{method}, {label}, $\lambda={lambda_}$",
                     ylim=ylim,
                 ),
-                out / f"03_boxplot_{method}_{case}_lambda_{lambda_:.2f}.{fmt}",
+                out / f"03_boxplot_{method}_{label}_lambda_{lambda_:.2f}.{fmt}",
             )
 
 # =============================================================================
